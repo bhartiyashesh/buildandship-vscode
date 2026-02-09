@@ -1,31 +1,30 @@
 /**
  * Deploy command — runs `bs deploy` in an integrated terminal
- * with progress tracking and notifications.
+ * with non-invasive status bar progress tracking.
+ *
+ * UX philosophy: No popups. No modal dialogs. No notification toasts.
+ * Progress lives in the status bar where developers expect it.
+ * The status bar item auto-clears on success/failure.
  */
 
 import * as vscode from "vscode";
 
 let activeDeployTerminal: vscode.Terminal | undefined;
+let deployStatusItem: vscode.StatusBarItem | undefined;
 
 /** Run `bs deploy` in the integrated terminal */
 export async function deploy(): Promise<void> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 
   if (!workspaceFolder) {
+    // This is the one case where a message is warranted — no folder open
     vscode.window.showErrorMessage("Build & Ship: Open a project folder first.");
     return;
   }
 
-  // If there's already a deploy running, ask to cancel
+  // If there's already a deploy running, just focus it — no popup
   if (activeDeployTerminal) {
-    const action = await vscode.window.showWarningMessage(
-      "A deploy is already running. Open it?",
-      "Show Terminal",
-      "Cancel"
-    );
-    if (action === "Show Terminal") {
-      activeDeployTerminal.show();
-    }
+    activeDeployTerminal.show();
     return;
   }
 
@@ -40,37 +39,41 @@ export async function deploy(): Promise<void> {
   terminal.show();
   terminal.sendText("bs deploy");
 
+  // ── Status bar progress (non-invasive) ────────────────────────
+  showDeployProgress(workspaceFolder.name);
+
   // Track terminal lifecycle
   const disposable = vscode.window.onDidCloseTerminal((t) => {
     if (t === terminal) {
       activeDeployTerminal = undefined;
       disposable.dispose();
+      clearDeployProgress();
     }
   });
+}
 
-  // Show progress notification
-  vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: "Build & Ship",
-      cancellable: false,
-    },
-    async (progress) => {
-      progress.report({ message: "Deploying..." });
+/** Show a discreet animated status bar item during deploy */
+function showDeployProgress(projectName: string): void {
+  if (!deployStatusItem) {
+    deployStatusItem = vscode.window.createStatusBarItem(
+      vscode.StatusBarAlignment.Left,
+      100 // High priority — show prominently but still just a status bar item
+    );
+  }
 
-      // Wait for terminal to close
-      await new Promise<void>((resolve) => {
-        const d = vscode.window.onDidCloseTerminal((t) => {
-          if (t === terminal) {
-            d.dispose();
-            resolve();
-          }
-        });
-      });
+  deployStatusItem.text = `$(sync~spin) Deploying ${projectName}…`;
+  deployStatusItem.tooltip = "Build & Ship deploy in progress — click to view terminal";
+  deployStatusItem.command = "workbench.action.terminal.focus";
+  deployStatusItem.backgroundColor = undefined;
+  deployStatusItem.show();
+}
 
-      progress.report({ message: "Deploy finished!", increment: 100 });
-    }
-  );
+/** Clear the deploy status bar item (auto-dismiss) */
+function clearDeployProgress(): void {
+  if (deployStatusItem) {
+    deployStatusItem.dispose();
+    deployStatusItem = undefined;
+  }
 }
 
 /** Run `bs init` in terminal */
@@ -114,16 +117,8 @@ export async function viewLogs(projectName: string): Promise<void> {
   terminal.sendText(`bs logs ${projectName}`);
 }
 
-/** Stop a project */
+/** Stop a project — no modal, just do it */
 export async function stop(projectName: string): Promise<void> {
-  const confirm = await vscode.window.showWarningMessage(
-    `Stop ${projectName}? This will stop the running container.`,
-    { modal: true },
-    "Stop"
-  );
-
-  if (confirm !== "Stop") { return; }
-
   const terminal = vscode.window.createTerminal({
     name: `Build & Ship: Stop`,
     iconPath: new vscode.ThemeIcon("debug-stop"),
@@ -146,10 +141,10 @@ export async function restart(projectName: string): Promise<void> {
   terminal.show();
 }
 
-/** Destroy a project */
+/** Destroy a project — this one warrants a confirm (destructive + irreversible) */
 export async function destroy(projectName: string): Promise<void> {
   const confirm = await vscode.window.showWarningMessage(
-    `⚠️ Destroy ${projectName}? This removes the container, image, subdomain, and all deploy history. This cannot be undone.`,
+    `Destroy ${projectName}? This removes everything and cannot be undone.`,
     { modal: true },
     "Destroy"
   );
