@@ -5,7 +5,7 @@
  *
  * State 1: No CLI  → "Install Build & Ship" (big button)
  * State 2: No auth → "Sign in with GitHub" (big button)
- * State 3: Ready   → Projects with live URLs, QR codes, and celebration
+ * State 3: Ready   → Projects with live URLs, QR codes, management, and celebration
  */
 
 import * as vscode from "vscode";
@@ -75,9 +75,15 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
           break;
         case "stop":
           vscode.commands.executeCommand("buildandship.stop", message.project);
+          setTimeout(() => this.refresh(), 3000);
           break;
         case "restart":
           vscode.commands.executeCommand("buildandship.restart", message.project);
+          setTimeout(() => this.refresh(), 5000);
+          break;
+        case "destroy":
+          vscode.commands.executeCommand("buildandship.destroy", message.project);
+          setTimeout(() => this.refresh(), 3000);
           break;
       }
     });
@@ -245,17 +251,19 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
     const projectCards = projects.map((p) => {
       const isLive = p.status === "live";
       const isFailed = p.status === "failed";
+      const isStopped = p.status === "stopped" || p.status === "exited";
       const dotClass = isLive ? "dot-live" : isFailed ? "dot-failed" : "dot-stopped";
       const statusLabel = isLive ? "live" : isFailed ? "failed" : p.status;
       const statusClass = isLive ? "status-live" : isFailed ? "status-failed" : "status-other";
       const url = p.public_url?.replace("https://", "") || "";
       const fullUrl = p.public_url || "";
+      const eName = this.escapeHtml(p.name);
 
       let card = /* html */ `
         <div class="project-card ${isLive ? 'project-card-live' : ''}">
           <div class="project-header">
             <span class="status-dot ${dotClass}"></span>
-            <span class="project-name">${this.escapeHtml(p.name)}</span>
+            <span class="project-name">${eName}</span>
             <span class="status-label ${statusClass}">${statusLabel}</span>
           </div>`;
 
@@ -285,7 +293,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
                 onerror="this.parentElement.style.display='none'"
               />
             </div>
-            <span class="qr-label">Scan to visit</span>
+            <span class="qr-label">Share with the world</span>
           </div>`;
       }
 
@@ -295,7 +303,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
         badges.push(`<span class="badge badge-framework">${this.escapeHtml(p.framework)}</span>`);
       }
       if (p.tunnel_active) {
-        badges.push('<span class="badge badge-tunnel">tunneled</span>');
+        badges.push('<span class="badge badge-public">Public</span>');
       }
       if (p.auto_deploy) {
         badges.push('<span class="badge badge-auto">auto-deploy</span>');
@@ -313,17 +321,55 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
         card += `<div class="project-meta">${meta.join(" &middot; ")}</div>`;
       }
 
-      // Quick actions
-      card += /* html */ `
-          <div class="quick-actions">
-            <a href="#" onclick="post('viewLogs', {project:'${this.escapeHtml(p.name)}'})">Logs</a>
-            <span class="action-sep">&middot;</span>
-            <a href="#" onclick="post('restart', {project:'${this.escapeHtml(p.name)}'})">Restart</a>
-            <span class="action-sep">&middot;</span>
-            <a href="#" onclick="post('stop', {project:'${this.escapeHtml(p.name)}'})">Stop</a>
-          </div>`;
+      // ── Management buttons ──────────────────────────────
+      card += `<div class="mgmt-section">`;
 
-      card += `</div>`;
+      if (isLive) {
+        // Live project: Logs, Restart, Stop
+        card += /* html */ `
+          <div class="mgmt-row">
+            <button class="mgmt-btn" onclick="post('viewLogs', {project:'${eName}'})">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M5 4h6v1H5V4zm0 3h6v1H5V7zm0 3h4v1H5v-1z"/></svg>
+              Logs
+            </button>
+            <button class="mgmt-btn" onclick="post('restart', {project:'${eName}'})">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/><path d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/></svg>
+              Restart
+            </button>
+            <button class="mgmt-btn mgmt-stop" onclick="post('stop', {project:'${eName}'})">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/></svg>
+              Stop
+            </button>
+          </div>`;
+      } else if (isStopped || isFailed) {
+        // Stopped/failed: Logs, Restart, Deploy
+        card += /* html */ `
+          <div class="mgmt-row">
+            <button class="mgmt-btn" onclick="post('viewLogs', {project:'${eName}'})">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M5 4h6v1H5V4zm0 3h6v1H5V7zm0 3h4v1H5v-1z"/></svg>
+              Logs
+            </button>
+            <button class="mgmt-btn" onclick="post('restart', {project:'${eName}'})">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/><path d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/></svg>
+              Restart
+            </button>
+          </div>`;
+      }
+
+      // Danger zone — always available, tucked away
+      card += /* html */ `
+          <details class="danger-zone">
+            <summary class="danger-toggle">Danger Zone</summary>
+            <div class="danger-content">
+              <p class="danger-warning">This permanently removes ${eName} and all its data. Cannot be undone.</p>
+              <button class="mgmt-btn mgmt-destroy" onclick="post('destroy', {project:'${eName}'})">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1h2.5a1 1 0 0 1 1 1v1z"/></svg>
+                Destroy Project
+              </button>
+            </div>
+          </details>`;
+
+      card += `</div></div>`;
       return card;
     }).join("");
 
@@ -415,9 +461,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
 
     /* ── Logo & Hero ─────────────────────────── */
 
-    .logo-mark {
-      margin-bottom: 4px;
-    }
+    .logo-mark { margin-bottom: 4px; }
 
     .title-lg {
       font-size: 20px;
@@ -433,11 +477,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       text-align: center;
     }
 
-    .hero-emoji {
-      font-size: 44px;
-      line-height: 1;
-      margin-bottom: 2px;
-    }
+    .hero-emoji { font-size: 44px; line-height: 1; margin-bottom: 2px; }
 
     @keyframes rocketBounce {
       0%, 100% { transform: translateY(0); }
@@ -468,13 +508,8 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       font-weight: 500;
     }
 
-    .check-done {
-      color: #4ade80;
-    }
-
-    .check-current {
-      color: var(--vscode-foreground);
-    }
+    .check-done { color: #4ade80; }
+    .check-current { color: var(--vscode-foreground); }
 
     .check-circle {
       width: 16px;
@@ -510,10 +545,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-textLink-foreground);
     }
 
-    .card h2 {
-      font-size: 14px;
-      font-weight: 700;
-    }
+    .card h2 { font-size: 14px; font-weight: 700; }
 
     .card-desc {
       font-size: 12px;
@@ -565,9 +597,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       letter-spacing: 0.2px;
     }
 
-    .btn-deploy:hover {
-      background: #1a8ae8;
-    }
+    .btn-deploy:hover { background: #1a8ae8; }
 
     .btn-ghost {
       background: transparent;
@@ -662,15 +692,8 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       width: 100%;
     }
 
-    .info-icon {
-      flex-shrink: 0;
-      font-size: 14px;
-      line-height: 1.3;
-    }
-
-    .info-banner strong {
-      color: #f59e0b;
-    }
+    .info-icon { flex-shrink: 0; font-size: 14px; line-height: 1.3; }
+    .info-banner strong { color: #f59e0b; }
 
     /* ── Projects list ────────────────────────── */
 
@@ -691,13 +714,9 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       transition: border-color 0.2s, box-shadow 0.2s;
     }
 
-    .project-card:hover {
-      border-color: var(--vscode-focusBorder);
-    }
+    .project-card:hover { border-color: var(--vscode-focusBorder); }
 
-    .project-card-live {
-      border-color: rgba(74, 222, 128, 0.2);
-    }
+    .project-card-live { border-color: rgba(74, 222, 128, 0.2); }
 
     .project-card-live:hover {
       border-color: rgba(74, 222, 128, 0.4);
@@ -751,20 +770,9 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       border-radius: 4px;
     }
 
-    .status-live {
-      background: rgba(74, 222, 128, 0.15);
-      color: #4ade80;
-    }
-
-    .status-failed {
-      background: rgba(248, 113, 113, 0.15);
-      color: #f87171;
-    }
-
-    .status-other {
-      background: var(--vscode-badge-background);
-      color: var(--vscode-badge-foreground);
-    }
+    .status-live { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+    .status-failed { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+    .status-other { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 
     /* ── Public URL (the star of the show!) ──── */
 
@@ -790,10 +798,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       color: #fbbf24;
     }
 
-    .external-icon {
-      flex-shrink: 0;
-      margin-left: auto;
-    }
+    .external-icon { flex-shrink: 0; margin-left: auto; }
 
     /* ── QR Code ─────────────────────────────── */
 
@@ -846,20 +851,11 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       border-radius: 4px;
     }
 
-    .badge-framework {
-      background: rgba(99, 102, 241, 0.15);
-      color: #818cf8;
-    }
+    .badge-framework { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
 
-    .badge-tunnel {
-      background: rgba(14, 165, 233, 0.15);
-      color: #38bdf8;
-    }
+    .badge-public { background: rgba(74, 222, 128, 0.12); color: #4ade80; }
 
-    .badge-auto {
-      background: rgba(168, 85, 247, 0.15);
-      color: #c084fc;
-    }
+    .badge-auto { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
 
     /* ── Project meta ────────────────────────── */
 
@@ -869,36 +865,95 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       opacity: 0.8;
     }
 
-    /* ── Quick actions ────────────────────────── */
+    /* ── Management buttons ───────────────────── */
 
-    .quick-actions {
+    .mgmt-section {
       display: flex;
-      align-items: center;
+      flex-direction: column;
       gap: 6px;
-      padding-top: 2px;
+      padding-top: 4px;
       border-top: 1px solid var(--vscode-widget-border);
       margin-top: 2px;
     }
 
-    .quick-actions a {
-      font-size: 11px;
-      color: var(--vscode-textLink-foreground);
-      text-decoration: none;
-      cursor: pointer;
-      padding: 2px 4px;
-      border-radius: 3px;
-      transition: background 0.1s;
+    .mgmt-row {
+      display: flex;
+      gap: 4px;
     }
 
-    .quick-actions a:hover {
-      background: var(--vscode-list-hoverBackground);
-      text-decoration: none;
-    }
-
-    .action-sep {
+    .mgmt-btn {
+      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 5px 8px;
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 6px;
+      background: transparent;
       color: var(--vscode-descriptionForeground);
-      opacity: 0.3;
+      font-family: var(--vscode-font-family);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .mgmt-btn:hover {
+      background: var(--vscode-list-hoverBackground);
+      border-color: var(--vscode-focusBorder);
+      color: var(--vscode-foreground);
+    }
+
+    .mgmt-stop { color: #fb923c; border-color: rgba(251, 146, 60, 0.25); }
+    .mgmt-stop:hover { background: rgba(251, 146, 60, 0.1); color: #f97316; border-color: rgba(251, 146, 60, 0.4); }
+
+    /* ── Danger zone ─────────────────────────── */
+
+    .danger-zone {
+      margin-top: 2px;
+    }
+
+    .danger-toggle {
       font-size: 10px;
+      font-weight: 600;
+      color: var(--vscode-descriptionForeground);
+      opacity: 0.5;
+      cursor: pointer;
+      list-style: none;
+      padding: 3px 0;
+      transition: opacity 0.15s;
+    }
+
+    .danger-toggle:hover { opacity: 0.8; }
+    .danger-toggle::-webkit-details-marker { display: none; }
+    .danger-toggle::before { content: "\\25B8  "; font-size: 8px; }
+    details[open] > .danger-toggle::before { content: "\\25BE  "; }
+
+    .danger-content {
+      padding: 8px 0 2px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .danger-warning {
+      font-size: 10.5px;
+      color: #f87171;
+      line-height: 1.4;
+      opacity: 0.8;
+    }
+
+    .mgmt-destroy {
+      color: #f87171;
+      border-color: rgba(248, 113, 113, 0.25);
+      background: rgba(248, 113, 113, 0.04);
+    }
+
+    .mgmt-destroy:hover {
+      background: rgba(248, 113, 113, 0.12);
+      border-color: rgba(248, 113, 113, 0.4);
+      color: #ef4444;
     }
 
     /* ── Footer & links ──────────────────────── */
@@ -941,10 +996,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       opacity: 1;
     }
 
-    .footer-sep {
-      color: var(--vscode-descriptionForeground);
-      opacity: 0.3;
-    }
+    .footer-sep { color: var(--vscode-descriptionForeground); opacity: 0.3; }
 
     .footer-tagline {
       font-size: 10.5px;
@@ -955,30 +1007,22 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       letter-spacing: 0.2px;
     }
 
-    /* ── Fade-in animation ───────────────────── */
+    /* ── Animations ──────────────────────────── */
 
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
-    .project-card {
-      animation: fadeIn 0.3s ease-out both;
-    }
-
+    .project-card { animation: fadeIn 0.3s ease-out both; }
     .project-card:nth-child(1) { animation-delay: 0s; }
     .project-card:nth-child(2) { animation-delay: 0.05s; }
     .project-card:nth-child(3) { animation-delay: 0.1s; }
     .project-card:nth-child(4) { animation-delay: 0.15s; }
     .project-card:nth-child(5) { animation-delay: 0.2s; }
 
-    .card {
-      animation: fadeIn 0.3s ease-out both;
-    }
-
-    .info-banner {
-      animation: fadeIn 0.4s ease-out 0.1s both;
-    }
+    .card { animation: fadeIn 0.3s ease-out both; }
+    .info-banner { animation: fadeIn 0.4s ease-out 0.1s both; }
   </style>
 </head>
 <body>

@@ -53,6 +53,10 @@ export async function showPanel(extensionUri: vscode.Uri): Promise<void> {
       case "restart":
         vscode.commands.executeCommand("buildandship.restart", message.project);
         break;
+      case "destroy":
+        vscode.commands.executeCommand("buildandship.destroy", message.project);
+        setTimeout(() => refreshPanel(currentPanel!), 3000);
+        break;
       case "refresh":
         await refreshPanel(currentPanel!);
         break;
@@ -197,7 +201,20 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
         </table>
       </div>` : ""}
 
-      ${project?.tunnel_active ? '<div class="tunnel-badge">Tunnel Active</div>' : ""}
+      ${project?.tunnel_active ? '<div class="public-badge"><span class="public-dot"></span> Public &mdash; The world can see it</div>' : ""}
+
+      <div class="danger-zone-section">
+        <details class="danger-details">
+          <summary class="danger-summary">Danger Zone</summary>
+          <div class="danger-body">
+            <p class="danger-text">Permanently destroy <strong>${escapeHtml(d.name)}</strong> and all its data. This action cannot be undone.</p>
+            <button class="danger-btn" onclick="post('destroy', { project: '${escapeHtml(d.name)}' })">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1h2.5a1 1 0 0 1 1 1v1z"/></svg>
+              Destroy Project
+            </button>
+          </div>
+        </details>
+      </div>
     </div>`;
   }).join("");
 
@@ -711,21 +728,93 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
     .dep-failed .dep-dot { background: #f87171; }
     .dep-building .dep-dot { background: #fbbf24; }
 
-    /* ── Tunnel badge ─────────────────────────── */
+    /* ── Public badge ─────────────────────────── */
 
-    .tunnel-badge {
+    .public-badge {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       margin: 12px 20px;
-      padding: 4px 10px;
-      border-radius: 4px;
-      font-size: 10.5px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11.5px;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      background: rgba(14, 165, 233, 0.1);
-      color: #38bdf8;
+      background: rgba(74, 222, 128, 0.08);
+      border: 1px solid rgba(74, 222, 128, 0.15);
+      color: #4ade80;
+    }
+
+    .public-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #4ade80;
+      display: inline-block;
+    }
+
+    /* ── Danger zone ─────────────────────────── */
+
+    .danger-zone-section {
+      padding: 12px 20px;
+      border-top: 1px solid var(--vscode-widget-border);
+    }
+
+    .danger-details summary {
+      list-style: none;
+      cursor: pointer;
+    }
+
+    .danger-details summary::-webkit-details-marker { display: none; }
+
+    .danger-summary {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--vscode-descriptionForeground);
+      opacity: 0.45;
+      transition: opacity 0.15s;
+      padding: 2px 0;
+    }
+
+    .danger-summary::before { content: "\\25B8  "; font-size: 9px; }
+    .danger-details[open] > .danger-summary::before { content: "\\25BE  "; }
+
+    .danger-summary:hover { opacity: 0.75; }
+
+    .danger-body {
+      padding: 12px 0 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .danger-text {
+      font-size: 12px;
+      color: #f87171;
+      line-height: 1.5;
+      opacity: 0.8;
+    }
+
+    .danger-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border: 1px solid rgba(248, 113, 113, 0.3);
+      border-radius: 8px;
+      background: rgba(248, 113, 113, 0.06);
+      color: #f87171;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      width: fit-content;
+    }
+
+    .danger-btn:hover {
+      background: rgba(248, 113, 113, 0.14);
+      border-color: rgba(248, 113, 113, 0.5);
+      color: #ef4444;
     }
 
     /* ── Empty state ──────────────────────────── */
