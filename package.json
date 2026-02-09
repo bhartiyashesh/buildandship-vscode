@@ -2,7 +2,7 @@
   "name": "buildandship",
   "displayName": "Build & Ship",
   "description": "Deploy from your editor. One click. Zero DevOps. Your hardware.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "BuildandShipIT",
   "license": "MIT",
   "icon": "resources/icon.png",
