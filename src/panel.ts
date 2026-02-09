@@ -164,23 +164,22 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
 
       ${isLive && url ? `
       <div class="url-showcase">
-        <div class="url-main">
+        <div class="url-row">
           <a class="live-url" href="#" onclick="post('openUrl', { url: '${escapeHtml(fullUrl)}' })">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" opacity="0.5"><path d="M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829A3 3 0 0 0 8.586 5.5L8 6.086a1.002 1.002 0 0 0-.154.199 2 2 0 0 1 .861 3.337L6.88 11.45a2 2 0 1 1-2.83-2.83l.793-.792a4.018 4.018 0 0 1-.128-1.287z"/><path d="M6.586 4.672A3 3 0 0 0 7.414 9.5l.775-.776a2 2 0 0 1-.896-3.346L9.12 3.55a2 2 0 1 1 2.83 2.83l-.793.792c.112.42.155.855.128 1.287l1.372-1.372a3 3 0 1 0-4.243-4.243L6.586 4.672z"/></svg>
             ${escapeHtml(url)}
             <svg class="url-external" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" opacity="0.35"><path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/><path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/></svg>
           </a>
+          <span class="public-tag">Public</span>
+          <button class="qr-toggle" onclick="this.closest('.url-showcase').querySelector('.qr-panel').classList.toggle('qr-visible')" title="Show QR Code">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 .5A.5.5 0 0 1 .5 0h3a.5.5 0 0 1 0 1H1v2.5a.5.5 0 0 1-1 0v-3zm12 0a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0V1h-2.5a.5.5 0 0 1-.5-.5zM.5 12a.5.5 0 0 1 .5.5V15h2.5a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5v-3a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1 0-1H15v-2.5a.5.5 0 0 1 .5-.5zM4 4h1v1H4V4zm2 0h1v1H6V4zm2 0h1v1H8V4zm0 2h1v1H8V6zm-2 0h1v1H6V6zm-2 0h1v1H4V6zm8-2h1v1h-1V4zm-2 0h1v1h-1V4zm2 2h1v1h-1V6zm-2 0h1v1h-1V6zm2 2h1v1h-1V8zm-2 0h1v1h-1V8zm-4 0h1v1H6V8zm-2 0h1v1H4V8z"/></svg>
+          </button>
         </div>
-        <div class="qr-block">
+        <div class="qr-panel">
           <div class="qr-frame">
-            <img
-              class="qr-img"
-              src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&bgcolor=ffffff&color=000000&data=${encodeURIComponent(fullUrl)}"
-              alt="QR Code"
-              onerror="this.parentElement.parentElement.style.display='none'"
-            />
+            <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&bgcolor=ffffff&color=000000&data=${encodeURIComponent(fullUrl)}" alt="QR Code" onerror="this.closest('.qr-panel').style.display='none'" />
           </div>
-          <span class="qr-caption">Share with the world</span>
+          <span class="qr-caption">Scan to share with the world</span>
         </div>
       </div>` : ""}
 
@@ -528,15 +527,17 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
 
     .url-showcase {
       display: flex;
-      align-items: center;
-      gap: 20px;
-      padding: 16px 20px;
+      flex-direction: column;
+      gap: 0;
+      padding: 14px 20px;
       background: rgba(245, 158, 11, 0.04);
       border-bottom: 1px solid var(--vscode-widget-border);
     }
 
-    .url-main {
-      flex: 1;
+    .url-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
     .live-url {
@@ -566,25 +567,68 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       margin-left: 4px;
     }
 
-    .qr-block {
-      display: flex;
+    .public-tag {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(74, 222, 128, 0.12);
+      color: #4ade80;
+      flex-shrink: 0;
+    }
+
+    .qr-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .qr-toggle:hover {
+      background: var(--vscode-list-hoverBackground);
+      border-color: var(--vscode-focusBorder);
+      color: var(--vscode-foreground);
+    }
+
+    .qr-panel {
+      display: none;
       flex-direction: column;
       align-items: center;
-      gap: 6px;
-      flex-shrink: 0;
+      gap: 8px;
+      padding: 14px 0 4px;
+      animation: fadeInQr 0.2s ease-out;
+    }
+
+    .qr-panel.qr-visible {
+      display: flex;
+    }
+
+    @keyframes fadeInQr {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
     }
 
     .qr-frame {
       background: #fff;
       border-radius: 10px;
-      padding: 8px;
+      padding: 10px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
     }
 
     .qr-img {
       display: block;
-      width: 96px;
-      height: 96px;
+      width: 120px;
+      height: 120px;
       image-rendering: pixelated;
     }
 
@@ -594,7 +638,7 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       text-transform: uppercase;
       letter-spacing: 0.8px;
       color: var(--vscode-descriptionForeground);
-      opacity: 0.7;
+      opacity: 0.6;
     }
 
     /* ── Local URL ────────────────────────────── */

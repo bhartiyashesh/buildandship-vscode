@@ -270,30 +270,28 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       // Prominent public URL for live projects
       if (isLive && url) {
         card += /* html */ `
-          <a class="public-url" href="#" onclick="post('openUrl', '${this.escapeHtml(fullUrl)}')">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" opacity="0.6">
-              <path d="M6.354 5.5H4a3 3 0 0 0 0 6h3a3 3 0 0 0 2.83-4H9.4A2 2 0 0 1 7 9.5H4a2 2 0 1 1 0-4h2.354z"/>
-              <path d="M9.646 10.5H12a3 3 0 1 0 0-6H9a3 3 0 0 0-2.83 4h.44A2 2 0 0 1 9 6.5h3a2 2 0 1 1 0 4H9.646z"/>
-            </svg>
-            ${this.escapeHtml(url)}
-            <svg class="external-icon" width="10" height="10" viewBox="0 0 16 16" fill="currentColor" opacity="0.4">
-              <path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/>
-              <path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/>
-            </svg>
-          </a>`;
-
-        // QR Code
-        card += /* html */ `
-          <div class="qr-section">
+          <div class="url-row">
+            <a class="public-url" href="#" onclick="post('openUrl', '${this.escapeHtml(fullUrl)}')">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" opacity="0.6">
+                <path d="M6.354 5.5H4a3 3 0 0 0 0 6h3a3 3 0 0 0 2.83-4H9.4A2 2 0 0 1 7 9.5H4a2 2 0 1 1 0-4h2.354z"/>
+                <path d="M9.646 10.5H12a3 3 0 1 0 0-6H9a3 3 0 0 0-2.83 4h.44A2 2 0 0 1 9 6.5h3a2 2 0 1 1 0 4H9.646z"/>
+              </svg>
+              ${this.escapeHtml(url)}
+              <svg class="external-icon" width="10" height="10" viewBox="0 0 16 16" fill="currentColor" opacity="0.4">
+                <path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/>
+                <path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/>
+              </svg>
+            </a>
+            <span class="public-tag">Public</span>
+            <button class="qr-toggle" onclick="this.closest('.project-card').querySelector('.qr-panel').classList.toggle('qr-visible')" title="Show QR Code">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M0 .5A.5.5 0 0 1 .5 0h3a.5.5 0 0 1 0 1H1v2.5a.5.5 0 0 1-1 0v-3zm12 0a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0V1h-2.5a.5.5 0 0 1-.5-.5zM.5 12a.5.5 0 0 1 .5.5V15h2.5a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5v-3a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1 0-1H15v-2.5a.5.5 0 0 1 .5-.5zM4 4h1v1H4V4zm2 0h1v1H6V4zm2 0h1v1H8V4zm0 2h1v1H8V6zm-2 0h1v1H6V6zm-2 0h1v1H4V6zm8-2h1v1h-1V4zm-2 0h1v1h-1V4zm2 2h1v1h-1V6zm-2 0h1v1h-1V6zm2 2h1v1h-1V8zm-2 0h1v1h-1V8zm-4 0h1v1H6V8zm-2 0h1v1H4V8z"/></svg>
+            </button>
+          </div>
+          <div class="qr-panel">
             <div class="qr-container">
-              <img
-                class="qr-code"
-                src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&bgcolor=ffffff&color=000000&data=${encodeURIComponent(fullUrl)}"
-                alt="QR Code"
-                onerror="this.parentElement.style.display='none'"
-              />
+              <img class="qr-code" src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&bgcolor=ffffff&color=000000&data=${encodeURIComponent(fullUrl)}" alt="QR Code" onerror="this.closest('.qr-panel').style.display='none'" />
             </div>
-            <span class="qr-label">Share with the world</span>
+            <span class="qr-label">Scan to share with the world</span>
           </div>`;
       }
 
@@ -776,20 +774,29 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
 
     /* ── Public URL (the star of the show!) ──── */
 
+    .url-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
     .public-url {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 600;
       color: #f59e0b;
       text-decoration: none;
-      padding: 6px 10px;
+      padding: 5px 10px;
       border-radius: 6px;
       background: rgba(245, 158, 11, 0.08);
       border: 1px solid rgba(245, 158, 11, 0.15);
       transition: all 0.15s;
       word-break: break-all;
+      flex: 1;
+      min-width: 0;
     }
 
     .public-url:hover {
@@ -800,14 +807,57 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
 
     .external-icon { flex-shrink: 0; margin-left: auto; }
 
-    /* ── QR Code ─────────────────────────────── */
+    .public-tag {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: rgba(74, 222, 128, 0.12);
+      color: #4ade80;
+      flex-shrink: 0;
+    }
 
-    .qr-section {
-      display: flex;
+    .qr-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 5px;
+      background: transparent;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .qr-toggle:hover {
+      background: var(--vscode-list-hoverBackground);
+      border-color: var(--vscode-focusBorder);
+      color: var(--vscode-foreground);
+    }
+
+    /* ── QR Code (toggle panel) ──────────────── */
+
+    .qr-panel {
+      display: none;
       flex-direction: column;
       align-items: center;
       gap: 6px;
-      padding: 6px 0 2px;
+      padding: 8px 0 2px;
+      animation: fadeInQr 0.2s ease-out;
+    }
+
+    .qr-panel.qr-visible {
+      display: flex;
+    }
+
+    @keyframes fadeInQr {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
     }
 
     .qr-container {
