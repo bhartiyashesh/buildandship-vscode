@@ -3,33 +3,26 @@
  *
  * Deploy from your editor. One click. Zero DevOps. Your hardware.
  *
- * This is the main entry point. It registers all commands,
- * views, and providers. The extension activates when:
- *   - A workspace contains bs.yml or Dockerfile
- *   - The user runs any Build & Ship command
+ * The UI is ONE webview that adapts to 3 states:
+ *   1. No CLI installed → Install it for the user
+ *   2. CLI installed, not logged in → GitHub sign-in
+ *   3. Logged in → Projects list + Deploy button
  */
 
 import * as vscode from "vscode";
 import { checkAuth, login, logout, onAuthChange } from "./auth.js";
-import { ProjectTreeProvider } from "./sidebar.js";
 import { deploy, init, link, viewLogs, stop, restart, destroy } from "./deploy.js";
 import { createStatusBar, updateStatusBar, disposeStatusBar } from "./statusbar.js";
 import { WelcomeViewProvider } from "./welcome.js";
 import { showPanel } from "./panel.js";
 
-let treeProvider: ProjectTreeProvider;
+let welcomeProvider: WelcomeViewProvider;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   console.log("[Build & Ship] Extension activating...");
 
-  // ── Sidebar TreeView ────────────────────────────────────────────
-  treeProvider = new ProjectTreeProvider();
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider("buildandship.projects", treeProvider)
-  );
-
-  // ── Welcome View (webview for unauthenticated state) ────────────
-  const welcomeProvider = new WelcomeViewProvider(context.extensionUri);
+  // ── Main Webview (handles ALL states) ───────────────────────────
+  welcomeProvider = new WelcomeViewProvider(context.extensionUri);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(WelcomeViewProvider.viewType, welcomeProvider)
   );
@@ -44,7 +37,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.commands.registerCommand("buildandship.login", async () => {
       await login();
-      treeProvider.reload();
+      welcomeProvider.refresh();
       updateStatusBar();
     })
   );
@@ -52,6 +45,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.commands.registerCommand("buildandship.logout", async () => {
       await logout();
+      welcomeProvider.refresh();
     })
   );
 
@@ -61,7 +55,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await deploy();
       // Refresh after deploy terminal closes
       setTimeout(() => {
-        treeProvider.reload();
+        welcomeProvider.refresh();
         updateStatusBar();
       }, 3000);
     })
@@ -77,16 +71,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Refresh
   context.subscriptions.push(
     vscode.commands.registerCommand("buildandship.refresh", async () => {
-      await treeProvider.reload();
+      await welcomeProvider.refresh();
       await updateStatusBar();
-      vscode.window.showInformationMessage("Build & Ship: Refreshed!");
     })
   );
 
   // Open URL
   context.subscriptions.push(
     vscode.commands.registerCommand("buildandship.openUrl", (item: any) => {
-      // Can be called from tree item or with a URL string
       const url = typeof item === "string" ? item : item?.project?.public_url;
       if (url) {
         vscode.env.openExternal(vscode.Uri.parse(url));
@@ -98,9 +90,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.commands.registerCommand("buildandship.viewLogs", (itemOrName: any) => {
       const name = typeof itemOrName === "string" ? itemOrName : itemOrName?.project?.name;
-      if (name) {
-        viewLogs(name);
-      }
+      if (name) { viewLogs(name); }
     })
   );
 
@@ -110,7 +100,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const name = typeof item === "string" ? item : item?.project?.name;
       if (name) {
         await stop(name);
-        setTimeout(() => treeProvider.reload(), 3000);
+        setTimeout(() => welcomeProvider.refresh(), 3000);
       }
     })
   );
@@ -121,7 +111,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const name = typeof item === "string" ? item : item?.project?.name;
       if (name) {
         await restart(name);
-        setTimeout(() => treeProvider.reload(), 5000);
+        setTimeout(() => welcomeProvider.refresh(), 5000);
       }
     })
   );
@@ -132,7 +122,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const name = typeof item === "string" ? item : item?.project?.name;
       if (name) {
         await destroy(name);
-        setTimeout(() => treeProvider.reload(), 3000);
+        setTimeout(() => welcomeProvider.refresh(), 3000);
       }
     })
   );
@@ -145,6 +135,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
+  // Install CLI
+  context.subscriptions.push(
+    vscode.commands.registerCommand("buildandship.installCli", () => {
+      const terminal = vscode.window.createTerminal({
+        name: "Build & Ship: Install",
+        iconPath: new vscode.ThemeIcon("cloud-download"),
+      });
+      terminal.show();
+      terminal.sendText("curl -fsSL https://buildandship.it/install.sh | sh");
+
+      // Watch for terminal close, then refresh
+      const disposable = vscode.window.onDidCloseTerminal((t) => {
+        if (t === terminal) {
+          disposable.dispose();
+          setTimeout(() => welcomeProvider.refresh(), 1000);
+        }
+      });
+    })
+  );
+
   // Dashboard Panel
   context.subscriptions.push(
     vscode.commands.registerCommand("buildandship.showPanel", () => {
@@ -153,27 +163,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // ── Auth state listener ─────────────────────────────────────────
-  onAuthChange((loggedIn) => {
-    if (loggedIn) {
-      treeProvider.reload();
-      updateStatusBar();
-    }
+  onAuthChange(() => {
+    welcomeProvider.refresh();
+    updateStatusBar();
   });
 
-  // ── Initial auth check ──────────────────────────────────────────
+  // ── Initial check ──────────────────────────────────────────────
   await checkAuth();
-
-  // If logged in, load data immediately
-  const loggedIn = await checkAuth();
-  if (loggedIn) {
-    treeProvider.reload();
-  }
 
   console.log("[Build & Ship] Extension activated ✓");
 }
 
 export function deactivate(): void {
-  treeProvider?.dispose();
   disposeStatusBar();
   console.log("[Build & Ship] Extension deactivated");
 }
