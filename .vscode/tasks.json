@@ -4,7 +4,6 @@
     {
       "type": "npm",
       "script": "watch",
-      "problemMatcher": ["$esbuild-watch"],
       "isBackground": true,
       "presentation": {
         "reveal": "never"
@@ -13,7 +12,19 @@
         "kind": "build",
         "isDefault": true
       },
-      "label": "npm: watch"
+      "label": "npm: watch",
+      "problemMatcher": {
+        "owner": "buildandship",
+        "pattern": {
+          "regexp": "^✘ \\[ERROR\\] (.+)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[watch\\]",
+          "endsPattern": "^(✓ Build complete|⚡ Done)"
+        }
+      }
     }
   ]
 }

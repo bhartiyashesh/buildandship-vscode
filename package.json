@@ -27,8 +27,7 @@
     "buildandship"
   ],
   "activationEvents": [
-    "workspaceContains:bs.yml",
-    "workspaceContains:Dockerfile"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -183,12 +182,16 @@
       ],
       "commandPalette": [
         {
-          "command": "buildandship.deploy",
-          "when": "buildandship.loggedIn"
+          "command": "buildandship.deploy"
         },
         {
-          "command": "buildandship.refresh",
-          "when": "buildandship.loggedIn"
+          "command": "buildandship.refresh"
+        },
+        {
+          "command": "buildandship.login"
+        },
+        {
+          "command": "buildandship.showPanel"
         }
       ]
     },
