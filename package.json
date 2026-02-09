@@ -3,7 +3,7 @@
   "displayName": "Build & Ship",
   "description": "Deploy from your editor. One click. Zero DevOps. Your hardware.",
   "version": "0.1.0",
-  "publisher": "buildandship",
+  "publisher": "BuildandShipIT",
   "license": "MIT",
   "icon": "resources/icon.png",
   "repository": {
@@ -15,7 +15,6 @@
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Deployment",
     "Other"
   ],
   "keywords": [
