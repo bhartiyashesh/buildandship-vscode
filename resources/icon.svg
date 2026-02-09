@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#d97706"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="256" height="256" rx="48" fill="url(#bg)"/>
+
+  <!-- Rocket body -->
+  <g transform="translate(128,128) rotate(-45) translate(-128,-128)">
+    <path d="M128 60 C128 60 160 90 160 140 L148 160 L108 160 L96 140 C96 90 128 60 128 60Z"
+          fill="url(#accent)" opacity="0.9"/>
+
+    <!-- Window -->
+    <circle cx="128" cy="115" r="12" fill="#1a1a2e" opacity="0.8"/>
+    <circle cx="128" cy="115" r="8" fill="#60a5fa" opacity="0.6"/>
+
+    <!-- Flames -->
+    <path d="M112 160 L118 185 L128 172 L138 185 L144 160Z"
+          fill="#ef4444" opacity="0.8"/>
+    <path d="M118 160 L122 178 L128 168 L134 178 L138 160Z"
+          fill="#fbbf24" opacity="0.9"/>
+
+    <!-- Fins -->
+    <path d="M96 140 L80 155 L96 155Z" fill="url(#accent)" opacity="0.7"/>
+    <path d="M160 140 L176 155 L160 155Z" fill="url(#accent)" opacity="0.7"/>
+  </g>
+
+  <!-- B&S text -->
+  <text x="128" y="230" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif"
+        font-size="28" font-weight="800" fill="#f59e0b" letter-spacing="-1">
+    B&amp;S
+  </text>
+</svg>
