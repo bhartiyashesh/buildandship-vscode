@@ -167,10 +167,15 @@ export async function deploy(): Promise<void> {
     if (!nowAuthed) { return; } // user cancelled login
   }
 
-  // If there's already a deploy running, just focus it — no popup
+  // If there's already a deploy terminal, check if it's still alive
   if (activeDeployTerminal) {
-    activeDeployTerminal.show();
-    return;
+    // Check if the terminal is still in the active terminal list
+    const stillAlive = vscode.window.terminals.includes(activeDeployTerminal);
+    if (stillAlive) {
+      // Dispose the old terminal so we can start a fresh deploy
+      activeDeployTerminal.dispose();
+    }
+    activeDeployTerminal = undefined;
   }
 
   // ── Snapshot + start watching BEFORE deploy starts ─────────────

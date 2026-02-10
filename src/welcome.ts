@@ -1498,10 +1498,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       font-size: 20px;
       font-weight: 800;
       letter-spacing: -0.5px;
-      background: linear-gradient(135deg, #4ade80, #22d3ee);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      color: #4ade80;
     }
 
     .celeb-subtitle {
@@ -1573,7 +1570,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       padding: 12px 14px;
       border: none;
       border-radius: 10px;
-      background: linear-gradient(135deg, #4ade80, #22d3ee);
+      background: #4ade80;
       color: #000;
       font-family: inherit;
       font-size: 14px;
