@@ -6,20 +6,139 @@
  * Progress lives in the status bar where developers expect it.
  * The status bar item auto-clears on success/failure.
  * On success → confetti celebration with public URL + QR code!
+ *
+ * Deploy watcher: Polls every 1s comparing against a pre-deploy snapshot.
+ * Detects success (new live project), failure, and re-deploys instantly —
+ * no need for the user to close the terminal.
  */
 
 import * as vscode from "vscode";
-import { isCliInstalled, isLoggedIn, statusAll } from "./cli.js";
+import { isCliInstalled, isLoggedIn, statusAll, listProjects } from "./cli.js";
 
 let activeDeployTerminal: vscode.Terminal | undefined;
 let deployStatusItem: vscode.StatusBarItem | undefined;
+let deployWatcherInterval: ReturnType<typeof setInterval> | undefined;
 
 /** Callback fired when a deploy succeeds with a live URL */
 let _onDeploySuccess: ((projectName: string, publicUrl: string) => void) | undefined;
 
+/** Callback fired when a deploy fails (for sidebar refresh) */
+let _onDeployFailure: (() => void) | undefined;
+
 /** Register a handler for deploy success events */
 export function onDeploySuccess(handler: (projectName: string, publicUrl: string) => void): void {
   _onDeploySuccess = handler;
+}
+
+/** Register a handler for deploy failure events */
+export function onDeployFailure(handler: () => void): void {
+  _onDeployFailure = handler;
+}
+
+/** Pre-deploy snapshot of project states for diff detection */
+interface ProjectSnapshot {
+  status: string;
+  url: string;
+}
+
+/** Stop the deploy watcher polling */
+function stopDeployWatcher(): void {
+  if (deployWatcherInterval) {
+    clearInterval(deployWatcherInterval);
+    deployWatcherInterval = undefined;
+  }
+}
+
+/**
+ * Start watching for deploy completion. Takes a snapshot before deploy starts,
+ * then polls every 1 second for state changes. Detects:
+ * - New live project (wasn't live before → celebration)
+ * - Re-deploy (was live, URL changed → celebration)
+ * - Failure (project went to "failed" → refresh only)
+ */
+async function startDeployWatcher(): Promise<void> {
+  // ── Snapshot: capture current state before deploy ──────────────
+  const snapshot = new Map<string, ProjectSnapshot>();
+  try {
+    const [projects, status] = await Promise.all([
+      listProjects().catch(() => []),
+      statusAll().catch(() => ({ projects: [] })),
+    ]);
+
+    // Merge data from both sources for a complete picture
+    const statusMap = new Map(status.projects.map((s) => [s.name, s]));
+    for (const p of projects) {
+      const s = statusMap.get(p.name);
+      snapshot.set(p.name, {
+        status: p.status || s?.status || "",
+        url: p.public_url || s?.url || "",
+      });
+    }
+  } catch {
+    // Snapshot failed — we'll still detect new projects (just not re-deploys)
+  }
+
+  // ── Poll every 1 second for changes ───────────────────────────
+  let tickCount = 0;
+  const maxTicks = 600; // 10 minutes at 1s intervals
+  let alreadyFired = false;
+
+  stopDeployWatcher(); // Clear any existing watcher
+
+  deployWatcherInterval = setInterval(async () => {
+    tickCount++;
+    if (tickCount > maxTicks || alreadyFired) {
+      stopDeployWatcher();
+      return;
+    }
+
+    try {
+      const [projects, status] = await Promise.all([
+        listProjects().catch(() => []),
+        statusAll().catch(() => ({ projects: [] })),
+      ]);
+
+      const statusMap = new Map(status.projects.map((s) => [s.name, s]));
+
+      for (const p of projects) {
+        const s = statusMap.get(p.name);
+        const currentStatus = p.status || s?.status || "";
+        const currentUrl = p.public_url || s?.url || "";
+        const prev = snapshot.get(p.name);
+
+        // ── Detect SUCCESS: project is now live with a URL ──────
+        if (currentStatus === "live" && currentUrl) {
+          const wasLive = prev?.status === "live";
+          const urlChanged = prev?.url !== currentUrl;
+          const wasNotLive = !prev || prev.status !== "live";
+
+          if (wasNotLive || urlChanged) {
+            // New deploy or re-deploy succeeded!
+            alreadyFired = true;
+            stopDeployWatcher();
+            clearDeployProgress();
+            if (_onDeploySuccess) {
+              _onDeploySuccess(p.name, currentUrl);
+            }
+            return;
+          }
+        }
+
+        // ── Detect FAILURE: project went from building to failed ──
+        if (currentStatus === "failed" && prev && prev.status !== "failed") {
+          alreadyFired = true;
+          stopDeployWatcher();
+          clearDeployProgress();
+          if (_onDeployFailure) {
+            _onDeployFailure();
+          }
+          return;
+        }
+      }
+    } catch {
+      // Silently ignore polling errors — keep trying
+    }
+  }, 1000);
 }
 
 /** Run `bs deploy` in the integrated terminal */
@@ -28,7 +147,7 @@ export async function deploy(): Promise<void> {
 
   if (!workspaceFolder) {
     // This is the one case where a message is warranted — no folder open
-    vscode.window.showErrorMessage("Build & Ship: Open a project folder first.");
+    vscode.window.showErrorMessage("Build & Ship: Open a project folder first. We can't deploy vibes alone.");
     return;
   }
 
@@ -54,6 +173,9 @@ export async function deploy(): Promise<void> {
     return;
   }
 
+  // ── Snapshot + start watching BEFORE deploy starts ─────────────
+  await startDeployWatcher();
+
   // Create terminal for deploy
   const terminal = vscode.window.createTerminal({
     name: "🚀 Build & Ship: Deploy",
@@ -68,27 +190,13 @@ export async function deploy(): Promise<void> {
   // ── Status bar progress (non-invasive) ────────────────────────
   showDeployProgress(workspaceFolder.name);
 
-  // Track terminal lifecycle — detect success after terminal closes
+  // ── Terminal close: cleanup ───────────────────────────────────
   const disposable = vscode.window.onDidCloseTerminal(async (t) => {
     if (t === terminal) {
       activeDeployTerminal = undefined;
       disposable.dispose();
+      stopDeployWatcher();
       clearDeployProgress();
-
-      // Poll status to see if a project just went live with a public URL
-      try {
-        // Brief delay to let CLI finish updating state
-        await new Promise((r) => setTimeout(r, 1500));
-        const status = await statusAll();
-        const liveProject = status.projects.find(
-          (p) => p.status === "live" && p.url
-        );
-        if (liveProject && liveProject.url && _onDeploySuccess) {
-          _onDeploySuccess(liveProject.name, liveProject.url);
-        }
-      } catch {
-        // Silently ignore — celebration is nice-to-have, not critical
-      }
     }
   });
 }
@@ -102,8 +210,8 @@ function showDeployProgress(projectName: string): void {
     );
   }
 
-  deployStatusItem.text = `$(sync~spin) Deploying ${projectName}…`;
-  deployStatusItem.tooltip = "Build & Ship deploy in progress — click to view terminal";
+  deployStatusItem.text = `$(sync~spin) Shipping ${projectName}…`;
+  deployStatusItem.tooltip = "Your code is becoming a website — click to watch the magic";
   deployStatusItem.command = "workbench.action.terminal.focus";
   deployStatusItem.backgroundColor = undefined;
   deployStatusItem.show();
@@ -122,7 +230,7 @@ export async function init(): Promise<void> {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 
   if (!workspaceFolder) {
-    vscode.window.showErrorMessage("Build & Ship: Open a project folder first.");
+    vscode.window.showErrorMessage("Build & Ship: Open a project folder first. We need something to work with!");
     return;
   }
 
@@ -185,7 +293,7 @@ export async function restart(projectName: string): Promise<void> {
 /** Destroy a project — this one warrants a confirm (destructive + irreversible) */
 export async function destroy(projectName: string): Promise<void> {
   const confirm = await vscode.window.showWarningMessage(
-    `Destroy ${projectName}? This removes everything and cannot be undone.`,
+    `Destroy ${projectName}? This nukes everything. There is no ctrl+z for this.`,
     { modal: true },
     "Destroy"
   );
@@ -198,6 +306,6 @@ export async function destroy(projectName: string): Promise<void> {
     isTransient: true,
   });
 
-  terminal.sendText(`bs destroy ${projectName}`);
+  terminal.sendText(`bs destroy ${projectName} --force`);
   terminal.show();
 }

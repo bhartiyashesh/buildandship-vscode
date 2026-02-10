@@ -1,7 +1,7 @@
 {
   "name": "buildandship",
   "displayName": "Build & Ship",
-  "description": "Deploy from your editor. One click. Zero DevOps. Your hardware.",
+  "description": "One click Deploy from your editor. Zero DevOps. Your hardware. Vibe Release!",
   "version": "0.3.0",
   "publisher": "BuildandShipIT",
   "license": "MIT",
@@ -19,11 +19,15 @@
   ],
   "keywords": [
     "deploy",
+    "build and ship",
+    "build",
+    "ship",
     "self-hosted",
     "docker",
     "devops",
-    "ship",
-    "buildandship"
+    "buildandship",
+    "vibe release",
+    "vibe deploy"
   ],
   "activationEvents": [
     "onStartupFinished"

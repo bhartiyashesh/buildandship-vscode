@@ -74,6 +74,13 @@ export async function showPanel(extensionUri: vscode.Uri): Promise<void> {
         vscode.commands.executeCommand("buildandship.destroy", message.project);
         setTimeout(() => currentPanel && refreshPanel(currentPanel), 3000);
         break;
+      case "copyLogs": {
+        if (message.text) {
+          await vscode.env.clipboard.writeText(message.text);
+          vscode.window.showInformationMessage("Logs copied to clipboard.");
+        }
+        break;
+      }
       case "refresh":
         await refreshPanel(currentPanel!);
         break;
@@ -160,7 +167,7 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
         <div class="qr-frame">
           <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&bgcolor=ffffff&color=000000&data=${encodeURIComponent(fullUrl)}" alt="QR" onerror="this.closest('.qr-panel').style.display='none'" />
         </div>
-        <span class="qr-label">Scan to share with the world</span>
+        <span class="qr-label">Point. Scan. Flex.</span>
       </div>`;
     }
 
@@ -213,7 +220,7 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       card += `
       <div class="server-note-inline">
         <span class="sn-icon">\u26A1</span>
-        <span><strong>Your computer is the server.</strong> If you shut down, your site goes offline.</span>
+        <span><strong>Your machine is the server.</strong> Shut it down and your site naps too. VS Code can close though &mdash; we run in the background.</span>
       </div>`;
     }
 
@@ -229,7 +236,7 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
     // Action buttons
     card += `<div class="actions-row">`;
     card += `
-      <button class="action-btn" onclick="event.stopPropagation(); post('viewLogs', { project: '${eName}' })" title="View Logs">
+      <button class="action-btn" onclick="event.stopPropagation(); toggleLogs('${eName}')" title="View Logs">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M5 4h6v1H5V4zm0 3h6v1H5V7zm0 3h4v1H5v-1z"/></svg>
         Logs
       </button>
@@ -254,35 +261,26 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
             <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" opacity="0.5"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M5 4h6v1H5V4zm0 3h6v1H5V7zm0 3h4v1H5v-1z"/></svg>
             Logs &mdash; ${eName}
           </span>
-          <button class="log-dismiss" onclick="event.stopPropagation(); document.getElementById('panel-logs-${eName}').classList.remove('open')">
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
-          </button>
+          <div class="log-actions">
+            <button class="log-action-btn" onclick="event.stopPropagation(); copyLogs('${eName}')" title="Copy logs">
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>
+            </button>
+            <button class="log-action-btn" onclick="event.stopPropagation(); document.getElementById('panel-logs-${eName}').classList.remove('open')" title="Close logs">
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+            </button>
+          </div>
         </div>
-        <pre class="log-content"><span class="log-placeholder">Click "Logs" to load...</span></pre>
+        <pre class="log-content"><span class="log-placeholder">Hit "Logs" to see what your app is thinking...</span></pre>
       </div>`;
 
-    // Deploy history
-    const deploysHtml = (d.deploys || []).slice(0, 5).map((dep) => {
-      const depClass = dep.status === "live" ? "dep-ok" : dep.status === "failed" ? "dep-fail" : "dep-other";
-      const duration = dep.duration_ms ? `${(dep.duration_ms / 1000).toFixed(1)}s` : "\u2014";
-      const sha = dep.commit_sha ? dep.commit_sha.slice(0, 7) : "\u2014";
-      const time = formatRelativeTime(dep.created_at);
-      return `<tr class="${depClass}">
-        <td><span class="dep-dot-mini"></span>${escapeHtml(dep.status)}</td>
-        <td><code>${sha}</code></td>
-        <td>${duration}</td>
-        <td>${escapeHtml(time)}</td>
-      </tr>`;
-    }).join("");
-
-    if (deploysHtml) {
+    // Latest deploy (single metric)
+    if (d.deploys && d.deploys.length > 0) {
+      const latest = d.deploys[0];
+      const duration = latest.duration_ms ? `${(latest.duration_ms / 1000).toFixed(1)}s` : "\u2014";
       card += `
       <div class="deploys-section">
-        <h3 class="section-title">Deploy History</h3>
-        <table class="deploys-table">
-          <thead><tr><th>Status</th><th>Commit</th><th>Duration</th><th>When</th></tr></thead>
-          <tbody>${deploysHtml}</tbody>
-        </table>
+        <h3 class="section-title">Ship Log</h3>
+        <span class="ship-metric">${duration}</span>
       </div>`;
     }
 
@@ -297,7 +295,7 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
         <details class="danger-details" onclick="event.stopPropagation()">
           <summary class="danger-summary">Danger Zone</summary>
           <div class="danger-inner">
-            <p class="danger-text">Permanently destroy <strong>${eName}</strong> and all its data. Cannot be undone.</p>
+            <p class="danger-text">Permanently delete <strong>${eName}</strong> and all its data. This cannot be undone.</p>
             <button class="danger-btn" onclick="post('destroy', { project: '${eName}' })">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1h2.5a1 1 0 0 1 1 1v1z"/></svg>
               Destroy Project
@@ -866,11 +864,17 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       color: var(--vscode-descriptionForeground);
     }
 
-    .log-dismiss {
+    .log-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .log-action-btn {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 20px; height: 20px;
+      width: 22px; height: 22px;
       border: none;
       border-radius: 4px;
       background: transparent;
@@ -879,7 +883,7 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       transition: all 0.15s;
     }
 
-    .log-dismiss:hover {
+    .log-action-btn:hover {
       background: var(--vscode-list-hoverBackground);
       color: var(--vscode-foreground);
     }
@@ -921,35 +925,17 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       text-transform: uppercase;
       letter-spacing: 0.7px;
       color: var(--vscode-descriptionForeground);
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       opacity: 0.6;
     }
 
-    .deploys-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 11.5px;
-    }
-
-    .deploys-table th {
-      text-align: left;
-      padding: 5px 8px;
-      font-size: 9.5px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      color: var(--vscode-descriptionForeground);
-      border-bottom: 1px solid var(--vscode-widget-border);
-      opacity: 0.6;
-    }
-
-    .deploys-table td {
-      padding: 6px 8px;
-      border-bottom: 1px solid var(--vscode-widget-border);
+    .ship-metric {
+      font-size: 20px;
+      font-weight: 800;
       font-variant-numeric: tabular-nums;
+      letter-spacing: -0.5px;
+      color: var(--vscode-foreground);
     }
-
-    .deploys-table tbody tr:last-child td { border-bottom: none; }
 
     .deploys-table code {
       font-family: var(--vscode-editor-font-family), monospace;
@@ -1131,16 +1117,18 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
     ${totalCount === 0 ? `
       <div class="empty">
         <div class="empty-emoji">\uD83D\uDE80</div>
-        <h2>No projects yet</h2>
-        <p>Open a project folder and deploy it.<br>We detect your framework, build a container, and give you a live URL.</p>
-        <button class="empty-btn" onclick="post('deploy')">\uD83D\uDE80 Deploy This Project</button>
+        <h2>It's quiet in here...</h2>
+        <p>Open a project folder and hit deploy.<br>We detect your framework, containerize it, and hand you a live URL.<br>Like magic, but with Docker.</p>
+        <button class="empty-btn" onclick="post('deploy')">\uD83D\uDE80 Ship It</button>
       </div>
     ` : `<div class="card-grid">${projectCards}</div>`}
 
     <div class="footer">
       <a href="#" onclick="post('openUrl', { url: 'https://buildandship.it' })">buildandship.it</a>
       <span>\u00B7</span>
-      <span>Your hardware. Your rules.</span>
+      <a href="#" onclick="post('openUrl', { url: 'https://buildandship.it/support' })">Support</a>
+      <span>\u00B7</span>
+      <span>Your hardware. Your rules. Zero cloud bills.</span>
     </div>
   </div>
 
@@ -1157,6 +1145,25 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
 
     function toggleCard(card) {
       card.classList.toggle('expanded');
+    }
+
+    function toggleLogs(project) {
+      const viewer = document.getElementById('panel-logs-' + project);
+      if (!viewer) return;
+      if (viewer.classList.contains('open')) {
+        viewer.classList.remove('open');
+      } else {
+        post('viewLogs', { project: project });
+      }
+    }
+
+    function copyLogs(project) {
+      const viewer = document.getElementById('panel-logs-' + project);
+      if (!viewer) return;
+      const output = viewer.querySelector('.log-content');
+      if (!output) return;
+      const text = output.textContent || '';
+      post('copyLogs', { text: text });
     }
 
     // Listen for log data
@@ -1250,8 +1257,8 @@ function getErrorHtml(error: string): string {
 <body>
   <div class="wrap">
     <div class="icon">\u26A0\uFE0F</div>
-    <h2>Could not load dashboard</h2>
-    <p>Make sure the <code>bs</code> CLI is installed and you're signed in.</p>
+    <h2>Dashboard hit a wall</h2>
+    <p>Make sure the <code>bs</code> CLI is installed and you're signed in. We can't show you cool stuff without it.</p>
     <div class="err">${safeError}</div>
   </div>
 </body>

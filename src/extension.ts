@@ -11,7 +11,7 @@
 
 import * as vscode from "vscode";
 import { checkAuth, login, logout, onAuthChange } from "./auth.js";
-import { deploy, init, link, viewLogs, stop, restart, destroy, onDeploySuccess } from "./deploy.js";
+import { deploy, init, link, viewLogs, stop, restart, destroy, onDeploySuccess, onDeployFailure } from "./deploy.js";
 import { createStatusBar, updateStatusBar, disposeStatusBar } from "./statusbar.js";
 import { WelcomeViewProvider } from "./welcome.js";
 import { showPanel } from "./panel.js";
@@ -30,6 +30,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // ── Deploy success → confetti celebration! ─────────────────────
   onDeploySuccess((projectName, publicUrl) => {
     welcomeProvider.celebrate(projectName, publicUrl);
+    welcomeProvider.refresh();
+    updateStatusBar();
+  });
+
+  // ── Deploy failure → refresh sidebar to show failed status ────
+  onDeployFailure(() => {
     welcomeProvider.refresh();
     updateStatusBar();
   });

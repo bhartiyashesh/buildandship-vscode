@@ -97,7 +97,7 @@ export async function login(): Promise<void> {
   await checkAuth();
 
   if (_loggedIn) {
-    vscode.window.showInformationMessage("Build & Ship: Signed in successfully! 🚀");
+    vscode.window.showInformationMessage("Build & Ship: You're in. Let's ship something.");
   }
 }
 
@@ -126,5 +126,5 @@ export async function logout(): Promise<void> {
   terminal.dispose();
   await checkAuth();
 
-  vscode.window.showInformationMessage("Build & Ship: Signed out.");
+  vscode.window.showInformationMessage("Build & Ship: Signed out. We'll miss you.");
 }

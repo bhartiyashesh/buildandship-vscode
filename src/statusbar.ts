@@ -44,7 +44,7 @@ export async function updateStatusBar(): Promise<void> {
 
     if (projects.length === 0) {
       statusBarItem.text = "$(rocket) Build & Ship";
-      statusBarItem.tooltip = "No projects deployed. Click to deploy.";
+      statusBarItem.tooltip = "Nothing deployed yet. Click to change that.";
       statusBarItem.command = "buildandship.deploy";
       statusBarItem.show();
       return;

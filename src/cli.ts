@@ -182,10 +182,10 @@ export async function getVersion(): Promise<string> {
   return match ? match[0] : "unknown";
 }
 
-/** Fetch recent logs for a project (bs logs <name> --tail 100) */
+/** Fetch recent logs for a project (bs logs <name> --lines N --follow=false) */
 export async function getLogs(project: string, lines = 100): Promise<string> {
   try {
-    const out = await exec(["logs", project, "--tail", String(lines)], 10000);
+    const out = await exec(["logs", project, "--lines", String(lines), "--follow=false"], 10000);
     return out;
   } catch (err: any) {
     return err.message || "Failed to fetch logs";

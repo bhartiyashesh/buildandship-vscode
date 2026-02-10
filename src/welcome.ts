@@ -108,6 +108,14 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
           }
           break;
         }
+        case "copyLogs": {
+          // Copy log text to clipboard
+          if (message.text) {
+            await vscode.env.clipboard.writeText(message.text);
+            vscode.window.showInformationMessage("Logs copied to clipboard.");
+          }
+          break;
+        }
         case "showPanel":
           vscode.commands.executeCommand("buildandship.showPanel");
           break;
@@ -209,12 +217,12 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
             <span class="step">2</span>
           </div>
           <h2>Install the CLI</h2>
-          <p class="card-desc">Installs the <code>bs</code> command. Takes ~10 seconds.</p>
+          <p class="card-desc">Installs the <code>bs</code> command.<br>Faster than your coffee order.</p>
           <button class="btn btn-primary full" onclick="post('install')">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.5.5 0 0 1 .5.5v9.793l2.146-2.147a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 1 1 .708-.708L7.5 11.293V1.5A.5.5 0 0 1 8 1z"/><path d="M2 13.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5z"/></svg>
             Install Build & Ship
           </button>
-          <button class="btn btn-ghost full" onclick="post('refresh')">I've already installed it ↻</button>
+          <button class="btn btn-ghost full" onclick="post('refresh')">Already installed, just flexing ↻</button>
         </div>
 
         <div class="footer-link">
@@ -240,8 +248,8 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
           </div>
         </div>
 
-        <h1 class="title-lg">Almost there!</h1>
-        <p class="subtitle">Sign in to deploy from your editor.</p>
+        <h1 class="title-lg">One more thing.</h1>
+        <p class="subtitle">Sign in so we know who to congratulate<br>when your deploy goes live.</p>
 
         <div class="auth-banner">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" opacity="0.5"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>
@@ -250,7 +258,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
 
         <div class="onboard-card">
           <h2>Sign in with GitHub</h2>
-          <p class="card-desc">We use GitHub for identity only.<br>No repo permissions needed.</p>
+          <p class="card-desc">Identity only. We don't touch your repos.<br>Pinky promise.</p>
           <button class="btn btn-primary full" onclick="post('login')">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
             Sign in with GitHub
@@ -274,18 +282,18 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
             <span class="rocket-float">&#x1F680;</span>
           </div>
 
-          <h1 class="title-lg">Ready to ship!</h1>
-          <p class="subtitle">Your first deploy is ~30 seconds away.</p>
+          <h1 class="title-lg">Launch sequence ready.</h1>
+          <p class="subtitle">Your first deploy is ~30 seconds away.<br>We timed it.</p>
 
           <div class="onboard-card">
-            <p class="card-desc">Open a project folder, hit deploy.<br>We detect, build, and give you a live URL.</p>
-            <button class="btn btn-deploy full" onclick="post('deploy')">&#x1F680; Deploy This Project</button>
+            <p class="card-desc">Open a project folder, hit deploy.<br>We figure out the rest. You get a live URL.</p>
+            <button class="btn btn-deploy full" onclick="post('deploy')">&#x1F680; Ship It</button>
           </div>
 
           <div class="footer-link">
             <a href="#" onclick="post('openUrl', 'https://buildandship.it')">buildandship.it</a>
             <span class="sep">&middot;</span>
-            <span class="tagline">Your hardware. Your rules.</span>
+            <span class="tagline">No cloud bills. Just vibes.</span>
           </div>
         </div>
       `);
@@ -336,7 +344,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
             <div class="qr-frame">
               <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&bgcolor=ffffff&color=000000&data=${encodeURIComponent(fullUrl)}" alt="QR" onerror="this.closest('.qr-drawer').style.display='none'" />
             </div>
-            <span class="qr-caption">Scan to share</span>
+            <span class="qr-caption">Point phone here. Magic.</span>
           </div>`;
       }
 
@@ -402,7 +410,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
         card += /* html */ `
           <div class="server-note-inline">
             <span class="note-icon">&#x26A1;</span>
-            <span><strong>Your computer is the server.</strong> If you shut down, your site goes offline.</span>
+            <span><strong>Your machine is the server.</strong> Shut it down and your site naps too. VS Code can close though &mdash; we run in the background like your best work.</span>
           </div>`;
       }
 
@@ -425,7 +433,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       card += `<div class="actions-bar">`;
       if (isLive) {
         card += /* html */ `
-          <button class="act-btn" onclick="event.stopPropagation(); post('viewLogs', {project:'${eName}'})">
+          <button class="act-btn" onclick="event.stopPropagation(); toggleLogs('${eName}')">
             <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M5 4h6v1H5V4zm0 3h6v1H5V7zm0 3h4v1H5v-1z"/></svg>
             Logs
           </button>
@@ -439,7 +447,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
           </button>`;
       } else if (isStopped || isFailed) {
         card += /* html */ `
-          <button class="act-btn" onclick="event.stopPropagation(); post('viewLogs', {project:'${eName}'})">
+          <button class="act-btn" onclick="event.stopPropagation(); toggleLogs('${eName}')">
             <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M5 4h6v1H5V4zm0 3h6v1H5V7zm0 3h4v1H5v-1z"/></svg>
             Logs
           </button>
@@ -458,29 +466,26 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
               <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" opacity="0.5"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M5 4h6v1H5V4zm0 3h6v1H5V7zm0 3h4v1H5v-1z"/></svg>
               Logs
             </span>
-            <button class="log-close" onclick="event.stopPropagation(); document.getElementById('logs-${eName}').classList.remove('open')">
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
-            </button>
+            <div class="log-actions">
+              <button class="log-action-btn" onclick="event.stopPropagation(); copyLogs('${eName}')" title="Copy logs">
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/></svg>
+              </button>
+              <button class="log-action-btn" onclick="event.stopPropagation(); document.getElementById('logs-${eName}').classList.remove('open')" title="Close logs">
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+              </button>
+            </div>
           </div>
-          <pre class="log-output"><span class="log-placeholder">Click "Logs" to load...</span></pre>
+          <pre class="log-output"><span class="log-placeholder">Hit "Logs" to see what your app is thinking...</span></pre>
         </div>`;
 
-      // Deploy history (if any)
+      // Latest deploy (single metric)
       if (p.deploys && p.deploys.length > 0) {
-        const rows = p.deploys.slice(0, 3).map((dep) => {
-          const depClass = dep.status === "live" ? "dep-ok" : dep.status === "failed" ? "dep-fail" : "dep-other";
-          const duration = dep.duration_ms ? `${(dep.duration_ms / 1000).toFixed(1)}s` : "\u2014";
-          const sha = dep.commit_sha ? dep.commit_sha.slice(0, 7) : "\u2014";
-          return `<div class="deploy-row ${depClass}">
-            <span class="dep-indicator"></span>
-            <code>${sha}</code>
-            <span class="dep-dur">${duration}</span>
-          </div>`;
-        }).join("");
+        const latest = p.deploys[0];
+        const duration = latest.duration_ms ? `${(latest.duration_ms / 1000).toFixed(1)}s` : "\u2014";
         card += /* html */ `
           <div class="deploys-mini">
-            <span class="section-lbl">Recent Deploys</span>
-            ${rows}
+            <span class="section-lbl">Ship Log</span>
+            <span class="ship-metric">${duration}</span>
           </div>`;
       }
 
@@ -489,7 +494,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
         <details class="danger-zone" onclick="event.stopPropagation()">
           <summary class="danger-toggle">Danger Zone</summary>
           <div class="danger-body">
-            <p class="danger-msg">Permanently destroy <strong>${eName}</strong>. Cannot be undone.</p>
+            <p class="danger-msg">Permanently delete <strong>${eName}</strong>. This cannot be undone.</p>
             <button class="act-btn act-danger" onclick="post('destroy', {project:'${eName}'})">
               <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1h2.5a1 1 0 0 1 1 1v1z"/></svg>
               Destroy
@@ -517,7 +522,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
         <div class="stat-chip total">${projects.length} total</div>
       </div>
 
-      <button class="btn btn-deploy full" onclick="post('deploy')">&#x1F680; Deploy This Project</button>
+      <button class="btn btn-deploy full" onclick="post('deploy')">&#x1F680; Ship It</button>
 
       <div class="projects-list">
         ${projectCards}
@@ -527,8 +532,10 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
         <a href="#" onclick="post('showPanel')">Dashboard</a>
         <span class="sep">&middot;</span>
         <a href="#" onclick="post('openUrl', 'https://buildandship.it')">buildandship.it</a>
+        <span class="sep">&middot;</span>
+        <a href="#" onclick="post('openUrl', 'https://buildandship.it/support')">Support</a>
       </div>
-      <div class="tagline">Your hardware. Your rules.</div>
+      <div class="tagline">Your hardware. Your rules. Zero cloud bills.</div>
     `);
   }
 
@@ -1255,11 +1262,17 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-descriptionForeground);
     }
 
-    .log-close {
+    .log-actions {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .log-action-btn {
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 18px; height: 18px;
+      width: 20px; height: 20px;
       border: none;
       border-radius: 3px;
       background: transparent;
@@ -1268,7 +1281,7 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       transition: all 0.15s;
     }
 
-    .log-close:hover {
+    .log-action-btn:hover {
       background: var(--vscode-list-hoverBackground);
       color: var(--vscode-foreground);
     }
@@ -1315,38 +1328,14 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       letter-spacing: 0.5px;
       color: var(--vscode-descriptionForeground);
       opacity: 0.5;
-      margin-bottom: 2px;
     }
 
-    .deploy-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 10.5px;
+    .ship-metric {
+      font-size: 16px;
+      font-weight: 800;
       font-variant-numeric: tabular-nums;
-    }
-
-    .dep-indicator {
-      width: 5px; height: 5px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .dep-ok .dep-indicator { background: #4ade80; }
-    .dep-fail .dep-indicator { background: #f87171; }
-    .dep-other .dep-indicator { background: #fbbf24; }
-
-    .deploy-row code {
-      font-family: var(--vscode-editor-font-family);
-      font-size: 10px;
-      padding: 0 3px;
-      border-radius: 2px;
-      background: var(--vscode-textCodeBlock-background);
-    }
-
-    .dep-dur {
-      color: var(--vscode-descriptionForeground);
-      font-size: 10px;
+      letter-spacing: -0.5px;
+      color: var(--vscode-foreground);
     }
 
     /* ── Danger zone ─────────────────────── */
@@ -1628,6 +1617,27 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       card.classList.toggle('expanded');
     }
 
+    function toggleLogs(project) {
+      const viewer = document.getElementById('logs-' + project);
+      if (!viewer) return;
+      if (viewer.classList.contains('open')) {
+        // Already open — close it
+        viewer.classList.remove('open');
+      } else {
+        // Closed — fetch and open
+        post('viewLogs', { project: project });
+      }
+    }
+
+    function copyLogs(project) {
+      const viewer = document.getElementById('logs-' + project);
+      if (!viewer) return;
+      const output = viewer.querySelector('.log-output');
+      if (!output) return;
+      const text = output.textContent || '';
+      post('copyLogs', { text: text });
+    }
+
     // ── Confetti engine ──────────────────────────
     function launchConfetti() {
       const canvas = document.createElement('canvas');
@@ -1703,8 +1713,8 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       overlay.innerHTML = \`
         <div class="celeb-card">
           <div class="celeb-emoji">\\u{1F389}</div>
-          <div class="celeb-title">Shipped!</div>
-          <div class="celeb-subtitle"><span class="celeb-project">\${project}</span> is live and public.</div>
+          <div class="celeb-title">You shipped it!</div>
+          <div class="celeb-subtitle"><span class="celeb-project">\${project}</span> is live. The internet can see it. You did that.</div>
 
           <div class="celeb-url-card">
             <a class="celeb-url" href="#" onclick="event.stopPropagation(); post('openUrl', '\${url}')">
@@ -1716,15 +1726,15 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
             <div class="celeb-qr">
               <img src="\${qrUrl}" alt="QR Code" onerror="this.closest('.celeb-qr').style.display='none'" />
             </div>
-            <span class="celeb-qr-label">Scan to open on phone</span>
+            <span class="celeb-qr-label">Show your mom. She'll be proud.</span>
           </div>
 
           <div class="celeb-server-note">
-            \\u26A1 <strong>Your computer is the server.</strong><br>If you shut down, your site goes offline.
+            \\u26A1 <strong>Your machine is the server.</strong><br>Shut it down and your site naps too. VS Code can close though &mdash; we handle the rest.
           </div>
 
           <button class="celeb-yay" onclick="document.getElementById('celebration').remove()">
-            \\u{1F389} Yay!
+            \\u{1F389} Back to building
           </button>
         </div>
       \`;
