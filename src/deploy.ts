@@ -5,13 +5,22 @@
  * UX philosophy: No popups. No modal dialogs. No notification toasts.
  * Progress lives in the status bar where developers expect it.
  * The status bar item auto-clears on success/failure.
+ * On success → confetti celebration with public URL + QR code!
  */
 
 import * as vscode from "vscode";
-import { isCliInstalled, isLoggedIn } from "./cli.js";
+import { isCliInstalled, isLoggedIn, statusAll } from "./cli.js";
 
 let activeDeployTerminal: vscode.Terminal | undefined;
 let deployStatusItem: vscode.StatusBarItem | undefined;
+
+/** Callback fired when a deploy succeeds with a live URL */
+let _onDeploySuccess: ((projectName: string, publicUrl: string) => void) | undefined;
+
+/** Register a handler for deploy success events */
+export function onDeploySuccess(handler: (projectName: string, publicUrl: string) => void): void {
+  _onDeploySuccess = handler;
+}
 
 /** Run `bs deploy` in the integrated terminal */
 export async function deploy(): Promise<void> {
@@ -59,12 +68,27 @@ export async function deploy(): Promise<void> {
   // ── Status bar progress (non-invasive) ────────────────────────
   showDeployProgress(workspaceFolder.name);
 
-  // Track terminal lifecycle
-  const disposable = vscode.window.onDidCloseTerminal((t) => {
+  // Track terminal lifecycle — detect success after terminal closes
+  const disposable = vscode.window.onDidCloseTerminal(async (t) => {
     if (t === terminal) {
       activeDeployTerminal = undefined;
       disposable.dispose();
       clearDeployProgress();
+
+      // Poll status to see if a project just went live with a public URL
+      try {
+        // Brief delay to let CLI finish updating state
+        await new Promise((r) => setTimeout(r, 1500));
+        const status = await statusAll();
+        const liveProject = status.projects.find(
+          (p) => p.status === "live" && p.url
+        );
+        if (liveProject && liveProject.url && _onDeploySuccess) {
+          _onDeploySuccess(liveProject.name, liveProject.url);
+        }
+      } catch {
+        // Silently ignore — celebration is nice-to-have, not critical
+      }
     }
   });
 }

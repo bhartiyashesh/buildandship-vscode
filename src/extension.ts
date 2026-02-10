@@ -11,7 +11,7 @@
 
 import * as vscode from "vscode";
 import { checkAuth, login, logout, onAuthChange } from "./auth.js";
-import { deploy, init, link, viewLogs, stop, restart, destroy } from "./deploy.js";
+import { deploy, init, link, viewLogs, stop, restart, destroy, onDeploySuccess } from "./deploy.js";
 import { createStatusBar, updateStatusBar, disposeStatusBar } from "./statusbar.js";
 import { WelcomeViewProvider } from "./welcome.js";
 import { showPanel } from "./panel.js";
@@ -26,6 +26,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(WelcomeViewProvider.viewType, welcomeProvider)
   );
+
+  // ── Deploy success → confetti celebration! ─────────────────────
+  onDeploySuccess((projectName, publicUrl) => {
+    welcomeProvider.celebrate(projectName, publicUrl);
+    welcomeProvider.refresh();
+    updateStatusBar();
+  });
 
   // ── Status Bar ──────────────────────────────────────────────────
   const statusBar = createStatusBar();

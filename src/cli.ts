@@ -99,6 +99,27 @@ function exec(args: string[], timeoutMs = 15000): Promise<string> {
   });
 }
 
+/** Like exec() but returns stdout + stderr combined.
+ *  Needed for commands like `bs whoami` where the CLI log package
+ *  writes user-visible output to stderr rather than stdout. */
+function execAll(args: string[], timeoutMs = 15000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const cli = getCliPath();
+    const proc = execFile(cli, args, {
+      timeout: timeoutMs,
+      maxBuffer: 1024 * 1024,
+      env: { ...process.env, NO_COLOR: "1" },
+    }, (error, stdout, stderr) => {
+      if (error) {
+        const msg = stderr?.trim() || error.message;
+        reject(new Error(`bs ${args.join(" ")}: ${msg}`));
+        return;
+      }
+      resolve((stdout || "") + (stderr || ""));
+    });
+  });
+}
+
 function execJSON<T>(args: string[]): Promise<T> {
   return exec([...args, "--json"]).then((out) => {
     try {
@@ -126,11 +147,18 @@ export function statusDetail(project: string): Promise<StatusDetail> {
   return execJSON<StatusDetail>(["status", project]);
 }
 
-/** Check if user is logged in by running bs whoami */
+/** Check if user is logged in by running bs whoami.
+ *  NOTE: `bs whoami` writes all output to stderr via the log package,
+ *  so we must use execAll() to capture both stdout + stderr. */
 export async function isLoggedIn(): Promise<boolean> {
   try {
-    await exec(["whoami"]);
-    return true;
+    const out = await execAll(["whoami"]);
+    // Not logged in → output contains "Not logged in"
+    if (out.includes("Not logged in")) {
+      return false;
+    }
+    // Logged in → output contains user info fields
+    return out.includes("Email") || out.includes("Name") || out.includes("User ID");
   } catch {
     return false;
   }

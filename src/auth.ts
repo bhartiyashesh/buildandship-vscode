@@ -46,7 +46,7 @@ export async function checkAuth(): Promise<boolean> {
   return _loggedIn;
 }
 
-/** Run `bs login` in terminal and wait for it to complete */
+/** Run `bs login` in terminal and detect when auth succeeds */
 export async function login(): Promise<void> {
   const terminal = vscode.window.createTerminal({
     name: "Build & Ship: Login",
@@ -56,17 +56,44 @@ export async function login(): Promise<void> {
   terminal.show();
   terminal.sendText("bs login");
 
-  // Wait for terminal to close (user completes OAuth)
+  // Poll for auth success instead of waiting for terminal close.
+  // bs login completes in the background (OAuth callback) and the terminal
+  // stays open — we detect success by polling `bs whoami --json`.
+  let resolved = false;
+
   await new Promise<void>((resolve) => {
+    // Poll every 2s for up to 5 minutes
+    const poll = setInterval(async () => {
+      if (resolved) { return; }
+      const authed = await isLoggedIn();
+      if (authed) {
+        resolved = true;
+        clearInterval(poll);
+        resolve();
+      }
+    }, 2000);
+
+    // Also resolve if terminal is closed (user gave up)
     const disposable = vscode.window.onDidCloseTerminal((t) => {
-      if (t === terminal) {
+      if (t === terminal && !resolved) {
+        resolved = true;
+        clearInterval(poll);
         disposable.dispose();
         resolve();
       }
     });
+
+    // Timeout after 5 minutes
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        clearInterval(poll);
+        resolve();
+      }
+    }, 5 * 60 * 1000);
   });
 
-  // Re-check auth after login completes
+  // Re-check auth
   await checkAuth();
 
   if (_loggedIn) {

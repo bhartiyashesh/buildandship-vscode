@@ -47,6 +47,17 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /** Trigger confetti celebration after a successful deploy */
+  celebrate(projectName: string, publicUrl: string): void {
+    if (this.webviewView) {
+      this.webviewView.webview.postMessage({
+        command: "celebrate",
+        project: projectName,
+        url: publicUrl,
+      });
+    }
+  }
+
   resolveWebviewView(
     webviewView: vscode.WebviewView,
     _context: vscode.WebviewViewResolveContext,
@@ -66,9 +77,16 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
           await vscode.commands.executeCommand("buildandship.login");
           this.refresh();
           break;
-        case "deploy":
+        case "deploy": {
+          // Check auth before deploying — if not logged in, show login screen
+          const authed = await isLoggedIn();
+          if (!authed) {
+            this.refresh(); // Will re-render and show login screen
+            return;
+          }
           vscode.commands.executeCommand("buildandship.deploy");
           break;
+        }
         case "install":
           vscode.commands.executeCommand("buildandship.installCli");
           break;
@@ -223,7 +241,12 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
         </div>
 
         <h1 class="title-lg">Almost there!</h1>
-        <p class="subtitle">One click to connect your identity.</p>
+        <p class="subtitle">Sign in to deploy from your editor.</p>
+
+        <div class="auth-banner">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" opacity="0.5"><path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>
+          <span>Not signed in</span>
+        </div>
 
         <div class="onboard-card">
           <h2>Sign in with GitHub</h2>
@@ -645,6 +668,24 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-button-foreground);
       display: flex; align-items: center; justify-content: center;
       font-size: 9px; font-weight: 700;
+    }
+
+    /* ── Auth banner ──────────────────────── */
+
+    .auth-banner {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.2);
+      font-size: 12px;
+      font-weight: 600;
+      color: #f87171;
+      width: 100%;
+      justify-content: center;
+      animation: fadeIn 0.3s ease-out;
     }
 
     /* ── Onboard card ────────────────────── */
@@ -1402,6 +1443,170 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
 
     .onboard-card { animation: fadeIn 0.3s ease-out; }
     .server-note { animation: fadeIn 0.35s ease-out 0.08s both; }
+
+    /* ── Celebration overlay ──────────────── */
+
+    .celebration-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      animation: celebFadeIn 0.3s ease-out;
+    }
+
+    @keyframes celebFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .confetti-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      pointer-events: none;
+    }
+
+    .celeb-card {
+      position: relative;
+      z-index: 10001;
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 16px;
+      padding: 28px 22px 22px;
+      max-width: 280px;
+      width: 90%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+      animation: celebCardIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes celebCardIn {
+      from { opacity: 0; transform: scale(0.8) translateY(20px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .celeb-emoji {
+      font-size: 44px;
+      line-height: 1;
+      animation: celebBounce 0.6s ease-out;
+    }
+
+    @keyframes celebBounce {
+      0% { transform: scale(0); }
+      50% { transform: scale(1.3); }
+      70% { transform: scale(0.9); }
+      100% { transform: scale(1); }
+    }
+
+    .celeb-title {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #4ade80, #22d3ee);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .celeb-subtitle {
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .celeb-project {
+      font-weight: 700;
+      color: var(--vscode-foreground);
+    }
+
+    .celeb-url-card {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 14px;
+      background: rgba(245, 158, 11, 0.05);
+      border: 1px solid rgba(245, 158, 11, 0.15);
+      border-radius: 10px;
+      margin-top: 4px;
+    }
+
+    .celeb-url {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #f59e0b;
+      text-decoration: none;
+      word-break: break-all;
+      text-align: center;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+
+    .celeb-url:hover { color: #fbbf24; }
+
+    .celeb-qr {
+      background: #fff;
+      border-radius: 8px;
+      padding: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+
+    .celeb-qr img {
+      width: 110px;
+      height: 110px;
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    .celeb-qr-label {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--vscode-descriptionForeground);
+      opacity: 0.5;
+    }
+
+    .celeb-yay {
+      width: 100%;
+      padding: 12px 14px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #4ade80, #22d3ee);
+      color: #000;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: -0.2px;
+      margin-top: 4px;
+    }
+
+    .celeb-yay:hover { filter: brightness(1.1); transform: scale(1.02); }
+    .celeb-yay:active { transform: scale(0.98); }
+
+    .celeb-server-note {
+      font-size: 10px;
+      color: var(--vscode-descriptionForeground);
+      text-align: center;
+      line-height: 1.45;
+      opacity: 0.7;
+    }
+
+    .celeb-server-note strong { color: #f59e0b; }
   </style>
 </head>
 <body>
@@ -1423,16 +1628,126 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
       card.classList.toggle('expanded');
     }
 
-    // Listen for log data from extension
+    // ── Confetti engine ──────────────────────────
+    function launchConfetti() {
+      const canvas = document.createElement('canvas');
+      canvas.className = 'confetti-canvas';
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const colors = ['#4ade80','#22d3ee','#f59e0b','#a78bfa','#f472b6','#fb923c','#34d399','#60a5fa'];
+      const particles = [];
+      for (let i = 0; i < 120; i++) {
+        particles.push({
+          x: canvas.width / 2 + (Math.random() - 0.5) * 60,
+          y: canvas.height / 2,
+          vx: (Math.random() - 0.5) * 14,
+          vy: -(Math.random() * 12 + 4),
+          w: Math.random() * 6 + 3,
+          h: Math.random() * 4 + 2,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          rot: Math.random() * 360,
+          rotV: (Math.random() - 0.5) * 12,
+          gravity: 0.18 + Math.random() * 0.08,
+          opacity: 1,
+          decay: 0.008 + Math.random() * 0.006,
+        });
+      }
+
+      let frame = 0;
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let alive = 0;
+        for (const p of particles) {
+          if (p.opacity <= 0) continue;
+          alive++;
+          p.x += p.vx;
+          p.vy += p.gravity;
+          p.y += p.vy;
+          p.vx *= 0.99;
+          p.rot += p.rotV;
+          if (frame > 40) p.opacity -= p.decay;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot * Math.PI / 180);
+          ctx.globalAlpha = Math.max(0, p.opacity);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+          ctx.restore();
+        }
+        frame++;
+        if (alive > 0 && frame < 200) {
+          requestAnimationFrame(draw);
+        } else {
+          canvas.remove();
+        }
+      }
+      requestAnimationFrame(draw);
+    }
+
+    // ── Show celebration popup ────────────────────
+    function showCelebration(project, url) {
+      // Remove existing celebration if any
+      const existing = document.getElementById('celebration');
+      if (existing) existing.remove();
+
+      const displayUrl = url.replace('https://', '');
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&bgcolor=ffffff&color=000000&data=' + encodeURIComponent(url);
+
+      const overlay = document.createElement('div');
+      overlay.id = 'celebration';
+      overlay.className = 'celebration-overlay';
+      overlay.innerHTML = \`
+        <div class="celeb-card">
+          <div class="celeb-emoji">\\u{1F389}</div>
+          <div class="celeb-title">Shipped!</div>
+          <div class="celeb-subtitle"><span class="celeb-project">\${project}</span> is live and public.</div>
+
+          <div class="celeb-url-card">
+            <a class="celeb-url" href="#" onclick="event.stopPropagation(); post('openUrl', '\${url}')">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829A3 3 0 0 0 8.586 5.5L8 6.086a1.002 1.002 0 0 0-.154.199 2 2 0 0 1 .861 3.337L6.88 11.45a2 2 0 1 1-2.83-2.83l.793-.792a4.018 4.018 0 0 1-.128-1.287z"/><path d="M6.586 4.672A3 3 0 0 0 7.414 9.5l.775-.776a2 2 0 0 1-.896-3.346L9.12 3.55a2 2 0 1 1 2.83 2.83l-.793.792c.112.42.155.855.128 1.287l1.372-1.372a3 3 0 1 0-4.243-4.243L6.586 4.672z"/></svg>
+              \${displayUrl}
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" opacity="0.4"><path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/><path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/></svg>
+            </a>
+
+            <div class="celeb-qr">
+              <img src="\${qrUrl}" alt="QR Code" onerror="this.closest('.celeb-qr').style.display='none'" />
+            </div>
+            <span class="celeb-qr-label">Scan to open on phone</span>
+          </div>
+
+          <div class="celeb-server-note">
+            \\u26A1 <strong>Your computer is the server.</strong><br>If you shut down, your site goes offline.
+          </div>
+
+          <button class="celeb-yay" onclick="document.getElementById('celebration').remove()">
+            \\u{1F389} Yay!
+          </button>
+        </div>
+      \`;
+
+      document.body.appendChild(overlay);
+
+      // Launch confetti
+      launchConfetti();
+      // Second burst slightly delayed
+      setTimeout(launchConfetti, 300);
+    }
+
+    // Listen for messages from extension
     window.addEventListener('message', (event) => {
       const msg = event.data;
+
+      // Log data for inline viewer
       if (msg.command === 'logsData' && msg.project) {
         const viewer = document.getElementById('logs-' + msg.project);
         if (viewer) {
           viewer.classList.add('open');
           const output = viewer.querySelector('.log-output');
           if (output) {
-            // Escape HTML in logs
             const escaped = msg.logs
               .replace(/&/g, '&amp;')
               .replace(/</g, '&lt;')
@@ -1441,6 +1756,11 @@ export class WelcomeViewProvider implements vscode.WebviewViewProvider {
             output.scrollTop = output.scrollHeight;
           }
         }
+      }
+
+      // Deploy celebration!
+      if (msg.command === 'celebrate' && msg.url) {
+        showCelebration(msg.project || 'Your project', msg.url);
       }
     });
   </script>
