@@ -8,6 +8,7 @@
  */
 
 import * as vscode from "vscode";
+import { isCliInstalled, isLoggedIn } from "./cli.js";
 
 let activeDeployTerminal: vscode.Terminal | undefined;
 let deployStatusItem: vscode.StatusBarItem | undefined;
@@ -20,6 +21,22 @@ export async function deploy(): Promise<void> {
     // This is the one case where a message is warranted — no folder open
     vscode.window.showErrorMessage("Build & Ship: Open a project folder first.");
     return;
+  }
+
+  // Check CLI is installed
+  const cliOk = await isCliInstalled();
+  if (!cliOk) {
+    await vscode.commands.executeCommand("buildandship.installCli");
+    return;
+  }
+
+  // Check auth — if not logged in, trigger login first
+  const authed = await isLoggedIn();
+  if (!authed) {
+    await vscode.commands.executeCommand("buildandship.login");
+    // Re-check after login flow completes
+    const nowAuthed = await isLoggedIn();
+    if (!nowAuthed) { return; } // user cancelled login
   }
 
   // If there's already a deploy running, just focus it — no popup

@@ -1,13 +1,19 @@
 /**
- * Dashboard Panel — a rich webview showing detailed project status,
- * deploy history, resource metrics, QR codes, and live URLs.
+ * Dashboard Panel — full-page webview with rich project details.
  *
- * Design: Modern, classy, professional typography.
- * Think Linear/Vercel dashboard — not a toy.
+ * Design: System Status (macOS) inspired — clean metric tiles,
+ * collapsible project cards, inline log viewer, elegant typography.
+ *
+ * Cards are collapsed by default. Click to expand and see:
+ * - System Status-style metric tiles (CPU, Memory, Uptime, Network)
+ * - Inline log viewer (no terminal needed)
+ * - Deploy history
+ * - Management actions
+ * - Danger zone
  */
 
 import * as vscode from "vscode";
-import { statusDetail, listProjects, type StatusDetail, type ListProject } from "./cli.js";
+import { statusDetail, listProjects, getLogs, type StatusDetail, type ListProject } from "./cli.js";
 
 let currentPanel: vscode.WebviewPanel | undefined;
 
@@ -44,18 +50,29 @@ export async function showPanel(extensionUri: vscode.Uri): Promise<void> {
       case "openUrl":
         vscode.env.openExternal(vscode.Uri.parse(message.url));
         break;
-      case "viewLogs":
-        vscode.commands.executeCommand("buildandship.viewLogs", message.project);
+      case "viewLogs": {
+        // Fetch logs and send back to webview for inline display
+        const logs = await getLogs(message.project, 150);
+        if (currentPanel) {
+          currentPanel.webview.postMessage({
+            command: "logsData",
+            project: message.project,
+            logs,
+          });
+        }
         break;
+      }
       case "stop":
         vscode.commands.executeCommand("buildandship.stop", message.project);
+        setTimeout(() => currentPanel && refreshPanel(currentPanel), 3000);
         break;
       case "restart":
         vscode.commands.executeCommand("buildandship.restart", message.project);
+        setTimeout(() => currentPanel && refreshPanel(currentPanel), 5000);
         break;
       case "destroy":
         vscode.commands.executeCommand("buildandship.destroy", message.project);
-        setTimeout(() => refreshPanel(currentPanel!), 3000);
+        setTimeout(() => currentPanel && refreshPanel(currentPanel), 3000);
         break;
       case "refresh":
         await refreshPanel(currentPanel!);
@@ -96,125 +113,201 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
   const liveCount = projects.filter((p) => p.status === "live").length;
   const totalCount = projects.length;
 
-  const projectCards = details.map((d) => {
+  const projectCards = details.map((d, idx) => {
     const project = projects.find((p) => p.name === d.name);
     const isLive = d.status === "live";
     const isFailed = d.status === "failed";
+    const isStopped = d.status === "stopped" || d.status === "exited";
     const statusClass = isLive ? "live" : isFailed ? "failed" : "stopped";
+    const statusLabel = isLive ? "live" : isFailed ? "failed" : d.status;
     const url = d.public_url?.replace("https://", "") || "";
     const fullUrl = d.public_url || "";
+    const eName = escapeHtml(d.name);
 
-    // Deploy history rows
+    // ── Collapsed header ─────────────────────
+    let card = `
+    <div class="card ${statusClass}" data-project="${eName}" style="animation-delay: ${idx * 0.05}s">
+      <div class="card-header" onclick="toggleCard(this.parentElement)">
+        <div class="card-identity">
+          <span class="dot ${statusClass}"></span>
+          <div class="card-title-area">
+            <h2 class="card-name">${eName}</h2>
+            <div class="card-chips">
+              <span class="chip-status ${statusClass}">${statusLabel}</span>
+              ${d.framework ? `<span class="chip-fw">${escapeHtml(d.framework)}</span>` : ""}
+              ${isLive && d.uptime ? `<span class="chip-meta">Up ${escapeHtml(d.uptime)}</span>` : ""}
+            </div>
+          </div>
+        </div>
+        <svg class="caret" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 0-.708z"/></svg>
+      </div>`;
+
+    // URL showcase (always visible for live projects)
+    if (isLive && url) {
+      card += `
+      <div class="url-bar">
+        <a class="url-link" href="#" onclick="event.stopPropagation(); post('openUrl', { url: '${escapeHtml(fullUrl)}' })">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" opacity="0.4"><path d="M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829A3 3 0 0 0 8.586 5.5L8 6.086a1.002 1.002 0 0 0-.154.199 2 2 0 0 1 .861 3.337L6.88 11.45a2 2 0 1 1-2.83-2.83l.793-.792a4.018 4.018 0 0 1-.128-1.287z"/><path d="M6.586 4.672A3 3 0 0 0 7.414 9.5l.775-.776a2 2 0 0 1-.896-3.346L9.12 3.55a2 2 0 1 1 2.83 2.83l-.793.792c.112.42.155.855.128 1.287l1.372-1.372a3 3 0 1 0-4.243-4.243L6.586 4.672z"/></svg>
+          <span class="url-text">${escapeHtml(url)}</span>
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" opacity="0.25"><path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/><path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/></svg>
+        </a>
+        <span class="public-tag">Public</span>
+        <button class="qr-toggle" onclick="event.stopPropagation(); this.closest('.card').querySelector('.qr-panel').classList.toggle('open')" title="QR Code">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M0 .5A.5.5 0 0 1 .5 0h3a.5.5 0 0 1 0 1H1v2.5a.5.5 0 0 1-1 0v-3zm12 0a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0V1h-2.5a.5.5 0 0 1-.5-.5zM.5 12a.5.5 0 0 1 .5.5V15h2.5a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5v-3a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1 0-1H15v-2.5a.5.5 0 0 1 .5-.5z"/></svg>
+        </button>
+      </div>
+      <div class="qr-panel">
+        <div class="qr-frame">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&bgcolor=ffffff&color=000000&data=${encodeURIComponent(fullUrl)}" alt="QR" onerror="this.closest('.qr-panel').style.display='none'" />
+        </div>
+        <span class="qr-label">Scan to share with the world</span>
+      </div>`;
+    }
+
+    // ── Expanded section ─────────────────────
+    card += `<div class="card-body">`;
+
+    // Metric tiles (System Status inspired)
+    if (d.resources) {
+      card += `<div class="metrics-grid">`;
+      card += `
+        <div class="metric">
+          <div class="metric-icon-wrap"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" opacity="0.45"><path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2.5 2.5 0 0 1-2.5 2.5v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 11.5 3h-7zM5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3z"/></svg></div>
+          <div class="metric-content">
+            <span class="metric-value">${escapeHtml(d.resources.cpu)}</span>
+            <span class="metric-label">CPU</span>
+          </div>
+        </div>
+        <div class="metric">
+          <div class="metric-icon-wrap"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" opacity="0.45"><path d="M1 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.586a1 1 0 0 0 .707-.293l.353-.353a.5.5 0 0 1 .708 0l.353.353a1 1 0 0 0 .707.293H15a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H1zm2 1a1 1 0 0 1 1 1v1a1 1 0 0 1-2 0V5a1 1 0 0 1 1-1zm4 0a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V5a1 1 0 0 1 1-1zm4 0a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V5a1 1 0 0 1 1-1z"/></svg></div>
+          <div class="metric-content">
+            <span class="metric-value">${escapeHtml(d.resources.memory)}</span>
+            <span class="metric-label">Memory</span>
+          </div>
+        </div>`;
+      if (d.resources.net) {
+        card += `
+        <div class="metric">
+          <div class="metric-icon-wrap"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" opacity="0.45"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm7.5-6.923c-.67.204-1.335.82-1.887 1.855A7.97 7.97 0 0 0 5.145 4H7.5V1.077zM4.09 4a9.267 9.267 0 0 1 .64-1.539 6.7 6.7 0 0 1 .597-.933A7.025 7.025 0 0 0 2.255 4H4.09zm-.582 3.5c.03-.877.138-1.718.312-2.5H1.674a6.958 6.958 0 0 0-.656 2.5h2.49z"/></svg></div>
+          <div class="metric-content">
+            <span class="metric-value">${escapeHtml(d.resources.net)}</span>
+            <span class="metric-label">Network</span>
+          </div>
+        </div>`;
+      }
+      if (d.uptime) {
+        card += `
+        <div class="metric">
+          <div class="metric-icon-wrap"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" opacity="0.45"><path d="M8 3.5a.5.5 0 0 0-1 0V8a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 7.71V3.5z"/><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/></svg></div>
+          <div class="metric-content">
+            <span class="metric-value">${escapeHtml(d.uptime)}</span>
+            <span class="metric-label">Uptime</span>
+          </div>
+        </div>`;
+      }
+      card += `</div>`;
+    }
+
+    // Server warning (only for live projects)
+    if (isLive) {
+      card += `
+      <div class="server-note-inline">
+        <span class="sn-icon">\u26A1</span>
+        <span><strong>Your computer is the server.</strong> If you shut down, your site goes offline.</span>
+      </div>`;
+    }
+
+    // Local URL
+    if (d.local_url) {
+      card += `
+      <div class="local-row">
+        <span class="local-badge">Local</span>
+        <a class="local-link" href="#" onclick="event.stopPropagation(); post('openUrl', { url: '${escapeHtml(d.local_url)}' })">${escapeHtml(d.local_url)}</a>
+      </div>`;
+    }
+
+    // Action buttons
+    card += `<div class="actions-row">`;
+    card += `
+      <button class="action-btn" onclick="event.stopPropagation(); post('viewLogs', { project: '${eName}' })" title="View Logs">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M5 4h6v1H5V4zm0 3h6v1H5V7zm0 3h4v1H5v-1z"/></svg>
+        Logs
+      </button>
+      <button class="action-btn" onclick="event.stopPropagation(); post('restart', { project: '${eName}' })" title="Restart">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/><path d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/></svg>
+        Restart
+      </button>`;
+    if (isLive) {
+      card += `
+      <button class="action-btn action-warn" onclick="event.stopPropagation(); post('stop', { project: '${eName}' })" title="Stop">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/></svg>
+        Stop
+      </button>`;
+    }
+    card += `</div>`;
+
+    // Inline log viewer
+    card += `
+      <div class="log-viewer" id="panel-logs-${eName}">
+        <div class="log-bar">
+          <span class="log-label">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" opacity="0.5"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M5 4h6v1H5V4zm0 3h6v1H5V7zm0 3h4v1H5v-1z"/></svg>
+            Logs &mdash; ${eName}
+          </span>
+          <button class="log-dismiss" onclick="event.stopPropagation(); document.getElementById('panel-logs-${eName}').classList.remove('open')">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+          </button>
+        </div>
+        <pre class="log-content"><span class="log-placeholder">Click "Logs" to load...</span></pre>
+      </div>`;
+
+    // Deploy history
     const deploysHtml = (d.deploys || []).slice(0, 5).map((dep) => {
-      const depClass = dep.status === "live" ? "dep-live" : dep.status === "failed" ? "dep-failed" : "dep-building";
+      const depClass = dep.status === "live" ? "dep-ok" : dep.status === "failed" ? "dep-fail" : "dep-other";
       const duration = dep.duration_ms ? `${(dep.duration_ms / 1000).toFixed(1)}s` : "\u2014";
       const sha = dep.commit_sha ? dep.commit_sha.slice(0, 7) : "\u2014";
       const time = formatRelativeTime(dep.created_at);
       return `<tr class="${depClass}">
-        <td><span class="dep-dot"></span>${escapeHtml(dep.status)}</td>
+        <td><span class="dep-dot-mini"></span>${escapeHtml(dep.status)}</td>
         <td><code>${sha}</code></td>
         <td>${duration}</td>
         <td>${escapeHtml(time)}</td>
       </tr>`;
     }).join("");
 
-    // Resources pill
-    const resourcesHtml = d.resources ? `
-      <div class="metrics">
-        <div class="metric">
-          <span class="metric-label">CPU</span>
-          <span class="metric-value">${escapeHtml(d.resources.cpu)}</span>
-        </div>
-        <div class="metric">
-          <span class="metric-label">Memory</span>
-          <span class="metric-value">${escapeHtml(d.resources.memory)}</span>
-        </div>
-        ${d.resources.net ? `<div class="metric">
-          <span class="metric-label">Network</span>
-          <span class="metric-value">${escapeHtml(d.resources.net)}</span>
-        </div>` : ""}
-      </div>` : "";
-
-    return `
-    <div class="project-card status-${statusClass}">
-      <div class="card-top">
-        <div class="card-identity">
-          <div class="status-indicator ${statusClass}"></div>
-          <div class="card-titles">
-            <h2 class="card-name">${escapeHtml(d.name)}</h2>
-            <div class="card-meta">
-              ${d.framework ? `<span class="meta-chip">${escapeHtml(d.framework)}</span>` : ""}
-              <span class="meta-chip meta-status-${statusClass}">${d.status}</span>
-              ${isLive && d.uptime ? `<span class="meta-text">Up ${escapeHtml(d.uptime)}</span>` : ""}
-            </div>
-          </div>
-        </div>
-        <div class="card-actions">
-          <button class="action-btn" onclick="post('viewLogs', { project: '${escapeHtml(d.name)}' })" title="View Logs">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M5 4h6v1H5V4zm0 3h6v1H5V7zm0 3h4v1H5v-1z"/></svg>
-          </button>
-          <button class="action-btn" onclick="post('restart', { project: '${escapeHtml(d.name)}' })" title="Restart">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/><path d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/></svg>
-          </button>
-          <button class="action-btn" onclick="post('stop', { project: '${escapeHtml(d.name)}' })" title="Stop">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/></svg>
-          </button>
-        </div>
-      </div>
-
-      ${isLive && url ? `
-      <div class="url-showcase">
-        <div class="url-row">
-          <a class="live-url" href="#" onclick="post('openUrl', { url: '${escapeHtml(fullUrl)}' })">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" opacity="0.5"><path d="M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829A3 3 0 0 0 8.586 5.5L8 6.086a1.002 1.002 0 0 0-.154.199 2 2 0 0 1 .861 3.337L6.88 11.45a2 2 0 1 1-2.83-2.83l.793-.792a4.018 4.018 0 0 1-.128-1.287z"/><path d="M6.586 4.672A3 3 0 0 0 7.414 9.5l.775-.776a2 2 0 0 1-.896-3.346L9.12 3.55a2 2 0 1 1 2.83 2.83l-.793.792c.112.42.155.855.128 1.287l1.372-1.372a3 3 0 1 0-4.243-4.243L6.586 4.672z"/></svg>
-            ${escapeHtml(url)}
-            <svg class="url-external" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" opacity="0.35"><path d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/><path d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/></svg>
-          </a>
-          <span class="public-tag">Public</span>
-          <button class="qr-toggle" onclick="this.closest('.url-showcase').querySelector('.qr-panel').classList.toggle('qr-visible')" title="Show QR Code">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 .5A.5.5 0 0 1 .5 0h3a.5.5 0 0 1 0 1H1v2.5a.5.5 0 0 1-1 0v-3zm12 0a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0V1h-2.5a.5.5 0 0 1-.5-.5zM.5 12a.5.5 0 0 1 .5.5V15h2.5a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5v-3a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1 0-1H15v-2.5a.5.5 0 0 1 .5-.5zM4 4h1v1H4V4zm2 0h1v1H6V4zm2 0h1v1H8V4zm0 2h1v1H8V6zm-2 0h1v1H6V6zm-2 0h1v1H4V6zm8-2h1v1h-1V4zm-2 0h1v1h-1V4zm2 2h1v1h-1V6zm-2 0h1v1h-1V6zm2 2h1v1h-1V8zm-2 0h1v1h-1V8zm-4 0h1v1H6V8zm-2 0h1v1H4V8z"/></svg>
-          </button>
-        </div>
-        <div class="qr-panel">
-          <div class="qr-frame">
-            <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&bgcolor=ffffff&color=000000&data=${encodeURIComponent(fullUrl)}" alt="QR Code" onerror="this.closest('.qr-panel').style.display='none'" />
-          </div>
-          <span class="qr-caption">Scan to share with the world</span>
-        </div>
-      </div>` : ""}
-
-      ${d.local_url ? `
-      <div class="local-url-row">
-        <span class="local-label">Local</span>
-        <a class="local-link" href="#" onclick="post('openUrl', { url: '${escapeHtml(d.local_url)}' })">${escapeHtml(d.local_url)}</a>
-      </div>` : ""}
-
-      ${resourcesHtml}
-
-      ${deploysHtml ? `
+    if (deploysHtml) {
+      card += `
       <div class="deploys-section">
-        <h3 class="section-heading">Deploy History</h3>
+        <h3 class="section-title">Deploy History</h3>
         <table class="deploys-table">
           <thead><tr><th>Status</th><th>Commit</th><th>Duration</th><th>When</th></tr></thead>
           <tbody>${deploysHtml}</tbody>
         </table>
-      </div>` : ""}
+      </div>`;
+    }
 
-      ${project?.tunnel_active ? '<div class="public-badge"><span class="public-dot"></span> Public &mdash; The world can see it</div>' : ""}
+    // Public badge
+    if (project?.tunnel_active) {
+      card += `<div class="tunnel-badge"><span class="tunnel-dot"></span>Public \u2014 The world can see it</div>`;
+    }
 
-      <div class="danger-zone-section">
-        <details class="danger-details">
+    // Danger zone
+    card += `
+      <div class="danger-section">
+        <details class="danger-details" onclick="event.stopPropagation()">
           <summary class="danger-summary">Danger Zone</summary>
-          <div class="danger-body">
-            <p class="danger-text">Permanently destroy <strong>${escapeHtml(d.name)}</strong> and all its data. This action cannot be undone.</p>
-            <button class="danger-btn" onclick="post('destroy', { project: '${escapeHtml(d.name)}' })">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1h2.5a1 1 0 0 1 1 1v1z"/></svg>
+          <div class="danger-inner">
+            <p class="danger-text">Permanently destroy <strong>${eName}</strong> and all its data. Cannot be undone.</p>
+            <button class="danger-btn" onclick="post('destroy', { project: '${eName}' })">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1h2.5a1 1 0 0 1 1 1v1z"/></svg>
               Destroy Project
             </button>
           </div>
         </details>
-      </div>
-    </div>`;
+      </div>`;
+
+    card += `</div></div>`;
+    return card;
   }).join("");
 
   return /* html */ `<!DOCTYPE html>
@@ -231,12 +324,11 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       font-family: 'Inter', var(--vscode-font-family), system-ui, -apple-system, sans-serif;
       color: var(--vscode-foreground);
       background: var(--vscode-editor-background);
-      padding: 0;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
 
-    /* ── Top bar ──────────────────────────────── */
+    /* ── Top bar ──────────────────────────── */
 
     .topbar {
       position: sticky;
@@ -245,41 +337,38 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 32px;
+      padding: 14px 28px;
       background: var(--vscode-editor-background);
       border-bottom: 1px solid var(--vscode-widget-border);
-      backdrop-filter: blur(12px);
     }
 
     .topbar-left {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
     }
 
     .brand {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 800;
       letter-spacing: -0.4px;
     }
 
-    .brand-accent {
-      color: #f59e0b;
-    }
+    .brand-accent { color: #f59e0b; }
 
     .stats {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 8px;
     }
 
     .stat-pill {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      padding: 3px 10px;
-      border-radius: 20px;
-      font-size: 12px;
+      gap: 4px;
+      padding: 2px 9px;
+      border-radius: 16px;
+      font-size: 11px;
       font-weight: 600;
       background: rgba(74, 222, 128, 0.1);
       color: #4ade80;
@@ -290,29 +379,28 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       color: var(--vscode-badge-foreground);
     }
 
-    .stat-dot {
-      width: 6px;
-      height: 6px;
+    .stat-mini-dot {
+      width: 5px; height: 5px;
       border-radius: 50%;
       background: currentColor;
     }
 
-    .topbar-actions {
+    .topbar-right {
       display: flex;
-      gap: 8px;
+      gap: 6px;
     }
 
     .topbar-btn {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 7px 14px;
+      gap: 5px;
+      padding: 6px 12px;
       border: 1px solid var(--vscode-widget-border);
-      border-radius: 8px;
+      border-radius: 7px;
       background: transparent;
       color: var(--vscode-foreground);
       font-family: inherit;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 500;
       cursor: pointer;
       transition: all 0.15s;
@@ -323,103 +411,85 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       border-color: var(--vscode-focusBorder);
     }
 
-    .topbar-btn-deploy {
+    .topbar-btn-primary {
       background: #0078d4;
       color: #fff;
       border-color: #0078d4;
       font-weight: 600;
     }
 
-    .topbar-btn-deploy:hover {
-      background: #1a8ae8;
-      border-color: #1a8ae8;
-    }
+    .topbar-btn-primary:hover { background: #1a8ae8; border-color: #1a8ae8; }
 
-    /* ── Content ──────────────────────────────── */
+    /* ── Content ──────────────────────────── */
 
     .content {
-      max-width: 960px;
+      max-width: 880px;
       margin: 0 auto;
-      padding: 24px 32px 48px;
+      padding: 20px 28px 40px;
     }
 
-    /* ── Server banner ────────────────────────── */
+    /* ── Server banner ────────────────────── */
 
-    .server-banner {
+    .banner {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 10px 16px;
-      border-radius: 8px;
-      background: rgba(245, 158, 11, 0.06);
-      border: 1px solid rgba(245, 158, 11, 0.15);
-      margin-bottom: 24px;
-      font-size: 12.5px;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 7px;
+      background: rgba(245, 158, 11, 0.05);
+      border: 1px solid rgba(245, 158, 11, 0.12);
+      margin-bottom: 20px;
+      font-size: 12px;
       line-height: 1.4;
     }
 
-    .server-banner-icon {
-      flex-shrink: 0;
-      font-size: 14px;
-    }
+    .banner-icon { flex-shrink: 0; font-size: 13px; }
+    .banner strong { color: #f59e0b; }
 
-    .server-banner strong {
-      color: #f59e0b;
-    }
+    /* ── Card system ──────────────────────── */
 
-    /* ── Project cards ────────────────────────── */
-
-    .grid {
+    .card-grid {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
     }
 
-    .project-card {
+    .card {
       border: 1px solid var(--vscode-widget-border);
-      border-radius: 12px;
+      border-radius: 10px;
       overflow: hidden;
-      transition: border-color 0.2s, box-shadow 0.2s;
-      animation: slideUp 0.35s ease-out both;
+      transition: border-color 0.2s;
+      animation: slideUp 0.3s ease-out both;
     }
 
-    .project-card:nth-child(1) { animation-delay: 0s; }
-    .project-card:nth-child(2) { animation-delay: 0.06s; }
-    .project-card:nth-child(3) { animation-delay: 0.12s; }
-    .project-card:nth-child(4) { animation-delay: 0.18s; }
-    .project-card:nth-child(5) { animation-delay: 0.24s; }
+    .card:nth-child(1) { animation-delay: 0s; }
+    .card:nth-child(2) { animation-delay: 0.05s; }
+    .card:nth-child(3) { animation-delay: 0.1s; }
+    .card:nth-child(4) { animation-delay: 0.15s; }
 
     @keyframes slideUp {
-      from { opacity: 0; transform: translateY(10px); }
+      from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
     }
 
-    .project-card:hover {
-      border-color: var(--vscode-focusBorder);
-    }
+    .card:hover { border-color: var(--vscode-focusBorder); }
 
-    .status-live {
-      border-left: 3px solid #4ade80;
-    }
+    .card.live { border-left: 3px solid #4ade80; }
+    .card.failed { border-left: 3px solid #f87171; }
+    .card.stopped { border-left: 3px solid #64748b; }
 
-    .status-failed {
-      border-left: 3px solid #f87171;
-    }
+    /* ── Card header (collapsed view) ──────── */
 
-    .status-stopped {
-      border-left: 3px solid #64748b;
-    }
-
-    /* ── Card top row ─────────────────────────── */
-
-    .card-top {
+    .card-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 20px;
-      background: var(--vscode-sideBar-background);
-      border-bottom: 1px solid var(--vscode-widget-border);
+      padding: 14px 18px;
+      cursor: pointer;
+      transition: background 0.15s;
     }
+
+    .card-header:hover { background: var(--vscode-list-hoverBackground); }
 
     .card-identity {
       display: flex;
@@ -427,154 +497,132 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       gap: 12px;
     }
 
-    .status-indicator {
-      width: 10px;
-      height: 10px;
+    .dot {
+      width: 9px; height: 9px;
       border-radius: 50%;
       flex-shrink: 0;
     }
 
-    .status-indicator.live {
+    .dot.live {
       background: #4ade80;
       box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
       animation: glow 2s ease-in-out infinite;
     }
 
-    .status-indicator.failed { background: #f87171; }
-    .status-indicator.stopped { background: #64748b; }
+    .dot.failed { background: #f87171; }
+    .dot.stopped { background: #64748b; }
 
     @keyframes glow {
-      0%, 100% { box-shadow: 0 0 5px rgba(74, 222, 128, 0.4); }
-      50% { box-shadow: 0 0 12px rgba(74, 222, 128, 0.7); }
+      0%, 100% { box-shadow: 0 0 5px rgba(74, 222, 128, 0.3); }
+      50% { box-shadow: 0 0 12px rgba(74, 222, 128, 0.6); }
     }
 
-    .card-titles {
+    .card-title-area {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 3px;
     }
 
     .card-name {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
       letter-spacing: -0.2px;
     }
 
-    .card-meta {
+    .card-chips {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       flex-wrap: wrap;
     }
 
-    .meta-chip {
-      font-size: 10.5px;
+    .chip-status {
+      font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.4px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: rgba(99, 102, 241, 0.12);
+      padding: 1px 7px;
+      border-radius: 3px;
+    }
+
+    .chip-status.live { background: rgba(74, 222, 128, 0.12); color: #4ade80; }
+    .chip-status.failed { background: rgba(248, 113, 113, 0.12); color: #f87171; }
+    .chip-status.stopped { background: rgba(100, 116, 139, 0.12); color: #94a3b8; }
+
+    .chip-fw {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      padding: 1px 7px;
+      border-radius: 3px;
+      background: rgba(99, 102, 241, 0.1);
       color: #818cf8;
     }
 
-    .meta-status-live {
-      background: rgba(74, 222, 128, 0.12);
-      color: #4ade80;
-    }
-
-    .meta-status-failed {
-      background: rgba(248, 113, 113, 0.12);
-      color: #f87171;
-    }
-
-    .meta-status-stopped {
-      background: rgba(100, 116, 139, 0.12);
-      color: #94a3b8;
-    }
-
-    .meta-text {
-      font-size: 11px;
+    .chip-meta {
+      font-size: 10.5px;
       color: var(--vscode-descriptionForeground);
+      opacity: 0.7;
     }
 
-    .card-actions {
-      display: flex;
-      gap: 4px;
-    }
-
-    .action-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      border: 1px solid transparent;
-      border-radius: 6px;
-      background: transparent;
+    .caret {
       color: var(--vscode-descriptionForeground);
-      cursor: pointer;
-      transition: all 0.15s;
+      opacity: 0.35;
+      transition: transform 0.2s;
+      flex-shrink: 0;
     }
 
-    .action-btn:hover {
-      background: var(--vscode-list-hoverBackground);
-      border-color: var(--vscode-widget-border);
-      color: var(--vscode-foreground);
-    }
+    .card.expanded .caret { transform: rotate(180deg); }
 
-    /* ── URL showcase (the star) ──────────────── */
+    /* ── URL bar (always visible for live) ──── */
 
-    .url-showcase {
+    .url-bar {
       display: flex;
-      flex-direction: column;
-      gap: 0;
-      padding: 14px 20px;
-      background: rgba(245, 158, 11, 0.04);
-      border-bottom: 1px solid var(--vscode-widget-border);
-    }
-
-    .url-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .live-url {
-      display: inline-flex;
       align-items: center;
       gap: 8px;
-      font-size: 15px;
+      padding: 10px 18px;
+      background: rgba(245, 158, 11, 0.03);
+      border-top: 1px solid var(--vscode-widget-border);
+    }
+
+    .url-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13.5px;
       font-weight: 600;
       color: #f59e0b;
       text-decoration: none;
-      padding: 8px 14px;
-      border-radius: 8px;
-      background: rgba(245, 158, 11, 0.08);
-      border: 1px solid rgba(245, 158, 11, 0.15);
+      padding: 6px 12px;
+      border-radius: 7px;
+      background: rgba(245, 158, 11, 0.06);
+      border: 1px solid rgba(245, 158, 11, 0.12);
       transition: all 0.15s;
       word-break: break-all;
+      flex: 1;
     }
 
-    .live-url:hover {
-      background: rgba(245, 158, 11, 0.14);
-      border-color: rgba(245, 158, 11, 0.3);
+    .url-link:hover {
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.25);
       color: #fbbf24;
     }
 
-    .url-external {
-      flex-shrink: 0;
-      margin-left: 4px;
+    .url-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .public-tag {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 3px 8px;
-      border-radius: 4px;
-      background: rgba(74, 222, 128, 0.12);
+      letter-spacing: 0.4px;
+      padding: 3px 7px;
+      border-radius: 3px;
+      background: rgba(74, 222, 128, 0.1);
       color: #4ade80;
       flex-shrink: 0;
     }
@@ -583,8 +631,7 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 32px;
-      height: 32px;
+      width: 30px; height: 30px;
       border: 1px solid var(--vscode-widget-border);
       border-radius: 6px;
       background: transparent;
@@ -605,59 +652,139 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       flex-direction: column;
       align-items: center;
       gap: 8px;
-      padding: 14px 0 4px;
-      animation: fadeInQr 0.2s ease-out;
+      padding: 12px 18px 8px;
+      border-top: 1px solid var(--vscode-widget-border);
+      animation: fadeScale 0.2s ease-out;
     }
 
-    .qr-panel.qr-visible {
-      display: flex;
-    }
+    .qr-panel.open { display: flex; }
 
-    @keyframes fadeInQr {
+    @keyframes fadeScale {
       from { opacity: 0; transform: scale(0.95); }
       to { opacity: 1; transform: scale(1); }
     }
 
     .qr-frame {
       background: #fff;
-      border-radius: 10px;
-      padding: 10px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      border-radius: 8px;
+      padding: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
 
-    .qr-img {
+    .qr-frame img {
       display: block;
-      width: 120px;
-      height: 120px;
+      width: 110px; height: 110px;
       image-rendering: pixelated;
     }
 
-    .qr-caption {
-      font-size: 10px;
+    .qr-label {
+      font-size: 9.5px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
+      letter-spacing: 0.7px;
       color: var(--vscode-descriptionForeground);
-      opacity: 0.6;
+      opacity: 0.5;
     }
 
-    /* ── Local URL ────────────────────────────── */
+    /* ── Card body (expanded, hidden by default) ── */
 
-    .local-url-row {
+    .card-body {
+      display: none;
+      flex-direction: column;
+      gap: 0;
+      border-top: 1px solid var(--vscode-widget-border);
+      animation: expandDown 0.2s ease-out;
+    }
+
+    .card.expanded .card-body { display: flex; }
+
+    @keyframes expandDown {
+      from { opacity: 0; transform: translateY(-3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Metric tiles (System Status style) ── */
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--vscode-widget-border);
+    }
+
+    .metric {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 8px 20px;
-      border-bottom: 1px solid var(--vscode-widget-border);
-      font-size: 12.5px;
+      padding: 12px 18px;
+      background: var(--vscode-editor-background);
     }
 
-    .local-label {
-      font-size: 10px;
+    .metric-icon-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px; height: 28px;
+      border-radius: 7px;
+      background: var(--vscode-sideBar-background);
+      flex-shrink: 0;
+    }
+
+    .metric-content {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .metric-value {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-label {
+      font-size: 9.5px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--vscode-descriptionForeground);
+      opacity: 0.55;
+    }
+
+    /* ── Server note inline (inside live cards) ── */
+
+    .server-note-inline {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 18px;
+      background: rgba(245, 158, 11, 0.04);
+      border-top: 1px solid var(--vscode-widget-border);
+      font-size: 11.5px;
+      line-height: 1.45;
+      color: var(--vscode-descriptionForeground);
+    }
+
+    .sn-icon { flex-shrink: 0; font-size: 13px; }
+    .server-note-inline strong { color: #f59e0b; }
+
+    /* ── Local URL ────────────────────────── */
+
+    .local-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      border-top: 1px solid var(--vscode-widget-border);
+      font-size: 12px;
+    }
+
+    .local-badge {
+      font-size: 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
       padding: 2px 6px;
       border-radius: 3px;
       background: var(--vscode-badge-background);
@@ -668,187 +795,251 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       color: var(--vscode-textLink-foreground);
       text-decoration: none;
       font-family: var(--vscode-editor-font-family), monospace;
-      font-size: 12px;
+      font-size: 11.5px;
     }
 
     .local-link:hover { text-decoration: underline; }
 
-    /* ── Metrics ──────────────────────────────── */
+    /* ── Actions row ──────────────────────── */
 
-    .metrics {
+    .actions-row {
       display: flex;
-      gap: 1px;
-      padding: 0 20px;
-      border-bottom: 1px solid var(--vscode-widget-border);
+      gap: 5px;
+      padding: 10px 18px;
+      border-top: 1px solid var(--vscode-widget-border);
     }
 
-    .metric {
+    .action-btn {
       flex: 1;
-      display: flex;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 6px 10px;
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--vscode-descriptionForeground);
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .action-btn:hover {
+      background: var(--vscode-list-hoverBackground);
+      border-color: var(--vscode-focusBorder);
+      color: var(--vscode-foreground);
+    }
+
+    .action-warn { color: #fb923c; border-color: rgba(251, 146, 60, 0.2); }
+    .action-warn:hover { background: rgba(251, 146, 60, 0.06); color: #f97316; border-color: rgba(251, 146, 60, 0.35); }
+
+    /* ── Inline log viewer ────────────────── */
+
+    .log-viewer {
+      display: none;
       flex-direction: column;
-      gap: 2px;
-      padding: 12px 12px 12px 0;
+      border-top: 1px solid var(--vscode-widget-border);
+      animation: expandDown 0.2s ease-out;
     }
 
-    .metric:not(:last-child) {
-      border-right: 1px solid var(--vscode-widget-border);
-      padding-right: 12px;
+    .log-viewer.open { display: flex; }
+
+    .log-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 18px;
+      background: var(--vscode-sideBar-background);
     }
 
-    .metric-label {
-      font-size: 10px;
+    .log-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10.5px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.6px;
+      letter-spacing: 0.4px;
       color: var(--vscode-descriptionForeground);
     }
 
-    .metric-value {
-      font-size: 14px;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-      letter-spacing: -0.2px;
+    .log-dismiss {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px; height: 20px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      transition: all 0.15s;
     }
 
-    /* ── Deploy history ───────────────────────── */
+    .log-dismiss:hover {
+      background: var(--vscode-list-hoverBackground);
+      color: var(--vscode-foreground);
+    }
+
+    .log-content {
+      font-family: var(--vscode-editor-font-family), 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      padding: 10px 18px;
+      max-height: 300px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--vscode-descriptionForeground);
+      background: var(--vscode-textCodeBlock-background);
+    }
+
+    .log-placeholder {
+      opacity: 0.35;
+      font-style: italic;
+    }
+
+    .log-content::-webkit-scrollbar { width: 5px; }
+    .log-content::-webkit-scrollbar-thumb {
+      background: var(--vscode-scrollbarSlider-background);
+      border-radius: 4px;
+    }
+
+    /* ── Deploy history ───────────────────── */
 
     .deploys-section {
-      padding: 14px 20px;
+      padding: 14px 18px;
+      border-top: 1px solid var(--vscode-widget-border);
     }
 
-    .section-heading {
-      font-size: 11px;
+    .section-title {
+      font-size: 10px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
+      letter-spacing: 0.7px;
       color: var(--vscode-descriptionForeground);
-      margin-bottom: 10px;
+      margin-bottom: 8px;
+      opacity: 0.6;
     }
 
     .deploys-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 12px;
+      font-size: 11.5px;
     }
 
     .deploys-table th {
       text-align: left;
-      padding: 6px 10px;
-      font-size: 10px;
+      padding: 5px 8px;
+      font-size: 9.5px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.4px;
       color: var(--vscode-descriptionForeground);
       border-bottom: 1px solid var(--vscode-widget-border);
+      opacity: 0.6;
     }
 
     .deploys-table td {
-      padding: 7px 10px;
+      padding: 6px 8px;
       border-bottom: 1px solid var(--vscode-widget-border);
       font-variant-numeric: tabular-nums;
     }
 
-    .deploys-table tbody tr:last-child td {
-      border-bottom: none;
-    }
+    .deploys-table tbody tr:last-child td { border-bottom: none; }
 
     .deploys-table code {
       font-family: var(--vscode-editor-font-family), monospace;
-      font-size: 11px;
-      padding: 1px 5px;
-      border-radius: 3px;
+      font-size: 10.5px;
+      padding: 1px 4px;
+      border-radius: 2px;
       background: var(--vscode-textCodeBlock-background);
     }
 
-    .dep-dot {
+    .dep-dot-mini {
       display: inline-block;
-      width: 6px;
-      height: 6px;
+      width: 5px; height: 5px;
       border-radius: 50%;
-      margin-right: 6px;
+      margin-right: 5px;
     }
 
-    .dep-live .dep-dot { background: #4ade80; }
-    .dep-failed .dep-dot { background: #f87171; }
-    .dep-building .dep-dot { background: #fbbf24; }
+    .dep-ok .dep-dot-mini { background: #4ade80; }
+    .dep-fail .dep-dot-mini { background: #f87171; }
+    .dep-other .dep-dot-mini { background: #fbbf24; }
 
-    /* ── Public badge ─────────────────────────── */
+    /* ── Tunnel badge ─────────────────────── */
 
-    .public-badge {
+    .tunnel-badge {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      margin: 12px 20px;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 11.5px;
+      gap: 6px;
+      margin: 10px 18px;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-size: 11px;
       font-weight: 600;
-      background: rgba(74, 222, 128, 0.08);
-      border: 1px solid rgba(74, 222, 128, 0.15);
+      background: rgba(74, 222, 128, 0.06);
+      border: 1px solid rgba(74, 222, 128, 0.12);
       color: #4ade80;
     }
 
-    .public-dot {
-      width: 6px;
-      height: 6px;
+    .tunnel-dot {
+      width: 5px; height: 5px;
       border-radius: 50%;
       background: #4ade80;
-      display: inline-block;
     }
 
-    /* ── Danger zone ─────────────────────────── */
+    /* ── Danger zone ─────────────────────── */
 
-    .danger-zone-section {
-      padding: 12px 20px;
+    .danger-section {
+      padding: 10px 18px;
       border-top: 1px solid var(--vscode-widget-border);
     }
 
-    .danger-details summary {
-      list-style: none;
-      cursor: pointer;
-    }
-
+    .danger-details summary { list-style: none; cursor: pointer; }
     .danger-details summary::-webkit-details-marker { display: none; }
 
     .danger-summary {
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 600;
       color: var(--vscode-descriptionForeground);
-      opacity: 0.45;
+      opacity: 0.35;
       transition: opacity 0.15s;
       padding: 2px 0;
     }
 
-    .danger-summary::before { content: "\\25B8  "; font-size: 9px; }
+    .danger-summary::before { content: "\\25B8  "; font-size: 8px; }
     .danger-details[open] > .danger-summary::before { content: "\\25BE  "; }
+    .danger-summary:hover { opacity: 0.6; }
 
-    .danger-summary:hover { opacity: 0.75; }
-
-    .danger-body {
-      padding: 12px 0 4px;
+    .danger-inner {
+      padding: 10px 0 4px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
 
     .danger-text {
-      font-size: 12px;
+      font-size: 11.5px;
       color: #f87171;
       line-height: 1.5;
-      opacity: 0.8;
+      opacity: 0.75;
     }
 
     .danger-btn {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      border: 1px solid rgba(248, 113, 113, 0.3);
-      border-radius: 8px;
-      background: rgba(248, 113, 113, 0.06);
+      gap: 7px;
+      padding: 7px 14px;
+      border: 1px solid rgba(248, 113, 113, 0.25);
+      border-radius: 7px;
+      background: rgba(248, 113, 113, 0.04);
       color: #f87171;
       font-family: inherit;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.15s;
@@ -856,67 +1047,58 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
     }
 
     .danger-btn:hover {
-      background: rgba(248, 113, 113, 0.14);
-      border-color: rgba(248, 113, 113, 0.5);
+      background: rgba(248, 113, 113, 0.1);
+      border-color: rgba(248, 113, 113, 0.4);
       color: #ef4444;
     }
 
-    /* ── Empty state ──────────────────────────── */
+    /* ── Empty state ──────────────────────── */
 
-    .empty-state {
+    .empty {
       text-align: center;
-      padding: 80px 40px;
+      padding: 60px 40px;
     }
 
-    .empty-emoji {
-      font-size: 48px;
-      margin-bottom: 16px;
-    }
+    .empty-emoji { font-size: 42px; margin-bottom: 14px; }
 
-    .empty-state h2 {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
+    .empty h2 { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
 
-    .empty-state p {
-      font-size: 13.5px;
+    .empty p {
+      font-size: 13px;
       color: var(--vscode-descriptionForeground);
-      margin-bottom: 24px;
+      margin-bottom: 20px;
       line-height: 1.6;
     }
 
-    .empty-deploy-btn {
+    .empty-btn {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      padding: 12px 28px;
+      gap: 7px;
+      padding: 10px 24px;
       background: #0078d4;
       color: #fff;
       border: none;
-      border-radius: 10px;
+      border-radius: 9px;
       font-family: inherit;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       cursor: pointer;
       transition: background 0.15s;
     }
 
-    .empty-deploy-btn:hover {
-      background: #1a8ae8;
-    }
+    .empty-btn:hover { background: #1a8ae8; }
 
-    /* ── Footer ───────────────────────────────── */
+    /* ── Footer ───────────────────────────── */
 
     .footer {
       display: flex;
       justify-content: center;
       align-items: center;
-      gap: 8px;
-      padding: 24px 0 8px;
-      font-size: 11px;
+      gap: 7px;
+      padding: 20px 0 6px;
+      font-size: 10.5px;
       color: var(--vscode-descriptionForeground);
-      opacity: 0.6;
+      opacity: 0.5;
     }
 
     .footer a {
@@ -924,43 +1106,36 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
       text-decoration: none;
     }
 
-    .footer a:hover {
-      color: var(--vscode-textLink-foreground);
-    }
+    .footer a:hover { color: var(--vscode-textLink-foreground); }
   </style>
 </head>
 <body>
   <div class="topbar">
     <div class="topbar-left">
-      <span class="brand">Build <span class="brand-accent">&</span> Ship</span>
+      <span class="brand">Build <span class="brand-accent">&amp;</span> Ship</span>
       <div class="stats">
-        <span class="stat-pill"><span class="stat-dot"></span>${liveCount} live</span>
+        <span class="stat-pill"><span class="stat-mini-dot"></span>${liveCount} live</span>
         <span class="stat-pill stat-total">${totalCount} projects</span>
       </div>
     </div>
-    <div class="topbar-actions">
+    <div class="topbar-right">
       <button class="topbar-btn" onclick="post('refresh')">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/><path d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/></svg>
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/><path d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/></svg>
         Refresh
       </button>
-      <button class="topbar-btn topbar-btn-deploy" onclick="post('deploy')">Deploy</button>
+      <button class="topbar-btn topbar-btn-primary" onclick="post('deploy')">Deploy</button>
     </div>
   </div>
 
   <div class="content">
-    <div class="server-banner">
-      <span class="server-banner-icon">\u26A1</span>
-      <span><strong>Your computer is the server.</strong> If you shut down or close the lid, your sites go offline.</span>
-    </div>
-
     ${totalCount === 0 ? `
-      <div class="empty-state">
+      <div class="empty">
         <div class="empty-emoji">\uD83D\uDE80</div>
         <h2>No projects yet</h2>
         <p>Open a project folder and deploy it.<br>We detect your framework, build a container, and give you a live URL.</p>
-        <button class="empty-deploy-btn" onclick="post('deploy')">\uD83D\uDE80 Deploy This Project</button>
+        <button class="empty-btn" onclick="post('deploy')">\uD83D\uDE80 Deploy This Project</button>
       </div>
-    ` : `<div class="grid">${projectCards}</div>`}
+    ` : `<div class="card-grid">${projectCards}</div>`}
 
     <div class="footer">
       <a href="#" onclick="post('openUrl', { url: 'https://buildandship.it' })">buildandship.it</a>
@@ -971,6 +1146,7 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
 
   <script>
     const vscode = acquireVsCodeApi();
+
     function post(command, data) {
       if (typeof data === 'object') {
         vscode.postMessage({ command, ...data });
@@ -978,6 +1154,35 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
         vscode.postMessage({ command });
       }
     }
+
+    function toggleCard(card) {
+      card.classList.toggle('expanded');
+    }
+
+    // Listen for log data
+    window.addEventListener('message', (event) => {
+      const msg = event.data;
+      if (msg.command === 'logsData' && msg.project) {
+        const viewer = document.getElementById('panel-logs-' + msg.project);
+        if (viewer) {
+          viewer.classList.add('open');
+          // Also expand the card if collapsed
+          const card = viewer.closest('.card');
+          if (card && !card.classList.contains('expanded')) {
+            card.classList.add('expanded');
+          }
+          const output = viewer.querySelector('.log-content');
+          if (output) {
+            const escaped = msg.logs
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;');
+            output.innerHTML = escaped || '<span class="log-placeholder">No logs available</span>';
+            output.scrollTop = output.scrollHeight;
+          }
+        }
+      }
+    });
   </script>
 </body>
 </html>`;
@@ -1006,11 +1211,8 @@ function formatRelativeTime(dateStr: string): string {
   }
 }
 
-function escapeHtmlError(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 function getErrorHtml(error: string): string {
+  const safeError = error.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return /* html */ `<!DOCTYPE html>
 <html>
 <head>
@@ -1029,19 +1231,19 @@ function getErrorHtml(error: string): string {
       text-align: center;
       -webkit-font-smoothing: antialiased;
     }
-    .wrap { max-width: 400px; }
-    .icon { font-size: 40px; margin-bottom: 16px; }
-    h2 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
-    p { font-size: 13px; color: var(--vscode-descriptionForeground); line-height: 1.6; }
-    .error-msg {
-      margin-top: 12px;
-      padding: 8px 14px;
-      border-radius: 6px;
-      background: rgba(248, 113, 113, 0.08);
-      border: 1px solid rgba(248, 113, 113, 0.2);
+    .wrap { max-width: 380px; }
+    .icon { font-size: 36px; margin-bottom: 14px; }
+    h2 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    p { font-size: 12.5px; color: var(--vscode-descriptionForeground); line-height: 1.6; }
+    .err {
+      margin-top: 10px;
+      padding: 7px 12px;
+      border-radius: 5px;
+      background: rgba(248, 113, 113, 0.06);
+      border: 1px solid rgba(248, 113, 113, 0.15);
       color: #f87171;
       font-family: var(--vscode-editor-font-family), monospace;
-      font-size: 11.5px;
+      font-size: 11px;
     }
   </style>
 </head>
@@ -1050,7 +1252,7 @@ function getErrorHtml(error: string): string {
     <div class="icon">\u26A0\uFE0F</div>
     <h2>Could not load dashboard</h2>
     <p>Make sure the <code>bs</code> CLI is installed and you're signed in.</p>
-    <div class="error-msg">${escapeHtmlError(error)}</div>
+    <div class="err">${safeError}</div>
   </div>
 </body>
 </html>`;

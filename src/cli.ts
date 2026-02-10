@@ -153,3 +153,13 @@ export async function getVersion(): Promise<string> {
   const match = out.match(/v[\d.]+/);
   return match ? match[0] : "unknown";
 }
+
+/** Fetch recent logs for a project (bs logs <name> --tail 100) */
+export async function getLogs(project: string, lines = 100): Promise<string> {
+  try {
+    const out = await exec(["logs", project, "--tail", String(lines)], 10000);
+    return out;
+  } catch (err: any) {
+    return err.message || "Failed to fetch logs";
+  }
+}
