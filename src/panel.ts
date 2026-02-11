@@ -313,9 +313,8 @@ function getHtml(projects: ListProject[], details: StatusDetail[]): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src https: data:;">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
@@ -1223,11 +1222,11 @@ function getErrorHtml(error: string): string {
   return /* html */ `<!DOCTYPE html>
 <html>
 <head>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src https: data:;">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Inter', var(--vscode-font-family), system-ui, sans-serif;
+      font-family: var(--vscode-font-family), system-ui, -apple-system, sans-serif;
       color: var(--vscode-foreground);
       background: var(--vscode-editor-background);
       display: flex;
